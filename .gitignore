@@ -9,3 +9,9 @@
 # 本地配置与密钥
 configs/config.local.yaml
 .env
+
+# 日志输出
+logs/
+
+# 本地配置（含密钥，不入库）
+configs/config.yaml

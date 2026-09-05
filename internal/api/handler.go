@@ -1,32 +1,18 @@
-// Package api 提供对外 HTTP 接口层。
-// 基于 Gin 框架，负责请求解析、参数校验、调用 Agent 编排层并返回响应。
+// Package api 提供对外 HTTP 接口层（Gin 框架）。
+// 职责仅限 HTTP 协议：路由注册、参数解析/校验、调用业务层、响应封装。
+// 业务逻辑一律下沉到 internal/service，本层不直接触碰存储。
 package api
 
 import (
-	"net/http"
-
-	"github.com/gin-gonic/gin"
+	"ai-start/internal/svc"
 )
 
-// ChatRequest 对话请求体。
-type ChatRequest struct {
-	SessionID string `json:"session_id"` // 会话标识，为空则创建新会话
-	Message   string `json:"message"`    // 用户输入文本
+// Handler HTTP 接口处理器：仅持有服务上下文，经 svc.Services 调用业务层。
+type Handler struct {
+	svc *svc.ServiceContext
 }
 
-// ChatResponse 对话响应体。
-type ChatResponse struct {
-	Reply string `json:"reply"` // Agent 回复内容
-}
-
-// ChatHandler 处理对话请求。
-// TODO: 接入 agent 编排层，当前为占位实现。
-func ChatHandler(c *gin.Context) {
-	var req ChatRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请求体解析失败"})
-		return
-	}
-
-	c.JSON(http.StatusOK, ChatResponse{Reply: "服务初始化中，Agent 尚未接入"})
+// NewHandler 创建 Handler 实例。
+func NewHandler(s *svc.ServiceContext) *Handler {
+	return &Handler{svc: s}
 }

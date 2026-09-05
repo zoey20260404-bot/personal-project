@@ -1,8 +1,0 @@
-# 应用配置示例，敏感信息（如 api_key）建议通过环境变量注入
-server:
-  port: 8080
-
-llm:
-  provider: openai # 模型提供方
-  model: gpt-4o    # 模型名称
-  api_key: ""      # API 密钥，勿提交真实密钥到仓库

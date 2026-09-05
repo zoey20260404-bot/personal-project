@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>公考参谋部 · 智能选岗</title>
+<style>
+:root {
+  --bg: #0f172a;
+  --bg-card: #1e293b;
+  --bg-input: #0b1220;
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --accent: #22d3ee;
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --border: #334155;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --radius: 12px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+  min-height: 100vh;
+  color: var(--text);
+}
+button { cursor: pointer; font-family: inherit; }
+input, textarea, select { font-family: inherit; }
+
+/* ============ 认证页 ============ */
+.auth-wrap {
+  min-height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.auth-card {
+  width: 100%; max-width: 400px;
+  background: rgba(30, 41, 59, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 40px 36px;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+}
+.auth-logo {
+  text-align: center; margin-bottom: 8px;
+  font-size: 32px;
+}
+.auth-title {
+  text-align: center; font-size: 24px; font-weight: 700;
+  background: linear-gradient(90deg, var(--primary-hover), var(--accent));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  margin-bottom: 6px;
+}
+.auth-sub { text-align: center; color: var(--text-dim); font-size: 13px; margin-bottom: 28px; }
+.auth-tabs {
+  display: flex; gap: 4px; background: var(--bg-input);
+  border-radius: 10px; padding: 4px; margin-bottom: 24px;
+}
+.auth-tab {
+  flex: 1; padding: 9px; border: none; border-radius: 8px;
+  background: transparent; color: var(--text-dim); font-size: 14px;
+  transition: all .2s;
+}
+.auth-tab.active { background: var(--primary); color: #fff; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+.form-input {
+  width: 100%; padding: 11px 14px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-input);
+  color: var(--text); font-size: 14px; outline: none;
+  transition: border-color .2s;
+}
+.form-input:focus { border-color: var(--primary); }
+.btn-primary {
+  width: 100%; padding: 12px; border: none; border-radius: 10px;
+  background: linear-gradient(90deg, var(--primary), #4f46e5);
+  color: #fff; font-size: 15px; font-weight: 600;
+  transition: all .2s;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(99,102,241,.4); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+.auth-msg { margin-top: 14px; font-size: 13px; text-align: center; min-height: 18px; }
+.auth-msg.error { color: var(--danger); }
+.auth-msg.success { color: var(--success); }
+
+/* ============ 主界面 ============ */
+.app { display: none; min-height: 100vh; flex-direction: column; }
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px;
+  background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+.brand-icon {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.user-badge {
+  font-size: 13px; color: var(--text-dim);
+  background: var(--bg-card); padding: 6px 14px; border-radius: 20px;
+  border: 1px solid var(--border);
+}
+.btn-ghost {
+  padding: 7px 16px; border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 13px;
+  transition: all .2s;
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--primary); }
+
+.nav-tabs {
+  display: flex; gap: 8px; padding: 16px 28px 0;
+}
+.nav-tab {
+  padding: 10px 22px; border-radius: 12px 12px 0 0;
+  border: 1px solid transparent; border-bottom: none;
+  background: transparent; color: var(--text-dim); font-size: 14px; font-weight: 500;
+  transition: all .2s;
+}
+.nav-tab.active {
+  background: rgba(30,41,59,.7); color: var(--text);
+  border-color: var(--border);
+}
+.nav-tab:hover:not(.active) { color: var(--text); }
+
+.main { flex: 1; padding: 0 28px 28px; }
+.panel {
+  display: none;
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 0 var(--radius) var(--radius) var(--radius);
+  padding: 28px;
+  min-height: 60vh;
+}
+.panel.active { display: block; animation: fadeIn .25s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* 解析面板 */
+.parse-grid { display: grid; grid-template-columns: 420px 1fr; gap: 28px; }
+@media (max-width: 960px) { .parse-grid { grid-template-columns: 1fr; } }
+.section-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.section-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.parse-input textarea {
+  width: 100%; min-height: 110px; resize: vertical;
+  padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-input);
+  color: var(--text); font-size: 14px; line-height: 1.6; outline: none;
+}
+.parse-input textarea:focus { border-color: var(--primary); }
+.mode-row { display: flex; gap: 10px; margin: 14px 0; }
+.mode-chip {
+  flex: 1; padding: 10px; text-align: center; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-input);
+  color: var(--text-dim); font-size: 13px; transition: all .2s;
+}
+.mode-chip.active { border-color: var(--primary); color: var(--text); background: rgba(99,102,241,.15); }
+.upload-box {
+  border: 2px dashed var(--border); border-radius: 10px;
+  padding: 18px; text-align: center; color: var(--text-dim);
+  font-size: 13px; cursor: pointer; transition: all .2s; margin-bottom: 14px;
+}
+.upload-box:hover, .upload-box.dragover { border-color: var(--accent); color: var(--accent); }
+.upload-box img { max-width: 100%; max-height: 120px; border-radius: 8px; margin-top: 10px; }
+.upload-types { display: flex; gap: 8px; margin-bottom: 12px; }
+.upload-type {
+  flex: 1; padding: 8px; border-radius: 8px; font-size: 12px;
+  border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+}
+.upload-type.active { border-color: var(--accent); color: var(--accent); }
+
+/* 结果卡片 */
+.result-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 300px; color: var(--text-dim); gap: 12px;
+}
+.result-empty .icon { font-size: 44px; opacity: .5; }
+.status-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+}
+.status-badge.success { background: rgba(52,211,153,.15); color: var(--success); }
+.status-badge.need_confirm { background: rgba(251,191,36,.15); color: var(--warning); }
+.profile-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px; margin-top: 18px;
+}
+.profile-item {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.profile-item .k { font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+.profile-item .v { font-size: 14px; font-weight: 600; word-break: break-all; }
+.profile-item .v.null { color: var(--warning); font-weight: 500; }
+.confidence-bar { margin-top: 16px; }
+.confidence-bar .track { height: 8px; border-radius: 4px; background: var(--bg-input); overflow: hidden; }
+.confidence-bar .fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--primary), var(--accent)); transition: width .4s; }
+.confidence-bar .label { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+
+/* 待确认字段 */
+.confirm-box {
+  margin-top: 20px; border: 1px solid rgba(251,191,36,.4);
+  background: rgba(251,191,36,.06); border-radius: var(--radius); padding: 18px;
+}
+.confirm-box h4 { color: var(--warning); font-size: 14px; margin-bottom: 12px; }
+.confirm-field { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+.confirm-field .fname { font-size: 13px; color: var(--warning); font-weight: 600; }
+.confirm-field .reason { font-size: 12px; color: var(--text-dim); grid-column: 2; margin-top: -6px; }
+.confirm-field input {
+  padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-input); color: var(--text); font-size: 13px; outline: none;
+}
+.confirm-field input:focus { border-color: var(--warning); }
+
+/* 收藏面板 */
+.fav-add { display: grid; grid-template-columns: 1fr 140px 140px 1fr auto; gap: 10px; margin-bottom: 22px; }
+@media (max-width: 960px) { .fav-add { grid-template-columns: 1fr 1fr; } }
+.fav-add input, .fav-add select {
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-input); color: var(--text); font-size: 13px; outline: none;
+}
+.fav-table { width: 100%; border-collapse: collapse; }
+.fav-table th {
+  text-align: left; padding: 10px 14px; font-size: 12px; color: var(--text-dim);
+  border-bottom: 1px solid var(--border); font-weight: 500;
+}
+.fav-table td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid rgba(51,65,85,.5); }
+.fav-table tr:hover td { background: rgba(99,102,241,.05); }
+.cat-tag { padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.cat-tag.rush { background: rgba(248,113,113,.15); color: var(--danger); }
+.cat-tag.stable { background: rgba(52,211,153,.15); color: var(--success); }
+.cat-tag.safe { background: rgba(99,102,241,.15); color: var(--primary-hover); }
+.cat-tag.custom { background: rgba(148,163,184,.15); color: var(--text-dim); }
+.btn-danger {
+  padding: 5px 12px; border-radius: 8px; border: none;
+  background: rgba(248,113,113,.12); color: var(--danger); font-size: 12px;
+}
+.btn-danger:hover { background: rgba(248,113,113,.25); }
+.empty-tip { text-align: center; color: var(--text-dim); padding: 48px 0; font-size: 14px; }
+
+/* 对话面板 */
+.chat-box { display: flex; flex-direction: column; height: 60vh; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 14px; }
+.chat-msg { max-width: 75%; padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.6; }
+.chat-msg.user { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
+.chat-msg.assistant { align-self: flex-start; background: var(--bg-input); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.chat-input-row { display: flex; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.chat-input-row input {
+  flex: 1; padding: 12px 16px; border-radius: 24px;
+  border: 1px solid var(--border); background: var(--bg-input);
+  color: var(--text); font-size: 14px; outline: none;
+}
+.btn-send {
+  padding: 0 24px; border: none; border-radius: 24px;
+  background: linear-gradient(90deg, var(--primary), #4f46e5); color: #fff; font-size: 14px;
+}
+
+/* Toast */
+.toast {
+  position: fixed; top: 24px; right: 24px; z-index: 100;
+  padding: 12px 20px; border-radius: 10px; font-size: 13px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0,0,0,.4);
+  transform: translateX(120%); transition: transform .3s ease;
+}
+.toast.show { transform: none; }
+.toast.success { border-color: var(--success); color: var(--success); }
+.toast.error { border-color: var(--danger); color: var(--danger); }
+
+.loading { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ============ 认证页 ============ -->
+<div class="auth-wrap" id="authWrap">
+  <div class="auth-card">
+    <div class="auth-logo">🎯</div>
+    <div class="auth-title">公考参谋部</div>
+    <div class="auth-sub">基于多 Agent 协作的智能选岗分析系统</div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">登录</button>
+      <button class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">注册</button>
+    </div>
+    <div class="form-group">
+      <label>用户名</label>
+      <input class="form-input" id="authUsername" placeholder="请输入用户名" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input class="form-input" id="authPassword" type="password" placeholder="至少 6 位" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')submitAuth()">
+    </div>
+    <button class="btn-primary" id="authBtn" onclick="submitAuth()">登 录</button>
+    <div class="auth-msg" id="authMsg"></div>
+  </div>
+</div>
+
+<!-- ============ 主界面 ============ -->
+<div class="app" id="app">
+  <div class="topbar">
+    <div class="brand"><div class="brand-icon">🎯</div>公考参谋部</div>
+    <div class="topbar-right">
+      <span class="user-badge" id="userBadge"></span>
+      <button class="btn-ghost" onclick="logout()">退出登录</button>
+    </div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-panel="parse" onclick="switchPanel('parse')">📝 条件解析</button>
+    <button class="nav-tab" data-panel="favorites" onclick="switchPanel('favorites')">⭐ 我的收藏</button>
+    <button class="nav-tab" data-panel="chat" onclick="switchPanel('chat')">💬 多轮追问</button>
+  </div>
+  <div class="main">
+
+    <!-- 条件解析 -->
+    <div class="panel active" id="panel-parse">
+      <div class="parse-grid">
+        <div class="parse-input">
+          <div class="section-title"><span class="dot"></span>输入你的报考条件</div>
+          <textarea id="parseText" placeholder="例如：我是计算机本科，党员，应届，想考广州或深圳"></textarea>
+          <div class="mode-row">
+            <button class="mode-chip active" data-mode="beginner" onclick="setMode('beginner')">🌱 0 基础模式<small style="display:block;font-size:11px;margin-top:2px;opacity:.7">详细解释</small></button>
+            <button class="mode-chip" data-mode="advanced" onclick="setMode('advanced')">🚀 进阶模式<small style="display:block;font-size:11px;margin-top:2px;opacity:.7">精简结论</small></button>
+          </div>
+          <div class="upload-types">
+            <button class="upload-type active">🎓 毕业证/学位证（辅助校验学历与专业）</button>
+          </div>
+          <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
+            <div id="uploadTip">📷 可上传毕业证/学位证，与文本一起融合解析（选传）</div>
+            <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="onFileChange(event)">
+          </div>
+          <button class="btn-primary" id="parseBtn" onclick="submitParse()">开始解析</button>
+        </div>
+        <div class="parse-result">
+          <div class="section-title"><span class="dot"></span>解析结果</div>
+          <div id="resultArea">
+            <div class="result-empty">
+              <div class="icon">🧭</div>
+              <div>提交条件后，这里会展示结构化的解析结果</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 收藏 -->
+    <div class="panel" id="panel-favorites">
+      <div class="section-title"><span class="dot"></span>收藏岗位</div>
+      <div class="fav-add">
+        <input id="favPosId" placeholder="岗位 ID，如 pos_001">
+        <select id="favCategory">
+          <option value="rush">🔥 冲刺</option>
+          <option value="stable">✅ 稳妥</option>
+          <option value="safe">🛡️ 保底</option>
+          <option value="custom">📌 自选</option>
+        </select>
+        <input id="favReportId" placeholder="报告 ID（可选）">
+        <input id="favNotes" placeholder="备注（可选）">
+        <button class="btn-primary" style="width:auto;padding:10px 22px" onclick="addFavorite()">收藏</button>
+      </div>
+      <div id="favList"></div>
+    </div>
+
+    <!-- 对话 -->
+    <div class="panel" id="panel-chat">
+      <div class="section-title"><span class="dot"></span>多轮追问<span style="font-size:12px;color:var(--text-dim);font-weight:400">（基于解析报告继续提问）</span></div>
+      <div class="chat-box">
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-msg assistant">你好！我是你的选岗参谋。完成条件解析后，可以在这里继续追问岗位对比、待遇、专业匹配等问题。</div>
+        </div>
+        <div class="chat-input-row">
+          <input id="chatInput" placeholder="输入你的问题..." onkeydown="if(event.key==='Enter')sendChat()">
+          <button class="btn-send" onclick="sendChat()">发送</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let token = localStorage.getItem('token') || '';
+let username = localStorage.getItem('username') || '';
+let authMode = 'login';
+let mode = 'beginner';
+let imageBase64 = '';
+let lastParseResult = null;
+
+// ---------- 工具 ----------
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || '');
+  setTimeout(() => t.className = 'toast', 3000);
+}
+async function api(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  const resp = await fetch(API + path, opts);
+  const data = await resp.json().catch(() => ({}));
+  if (resp.status === 401) { logout(); throw new Error('登录已过期'); }
+  if (!resp.ok) throw new Error(data.error || ('请求失败 ' + resp.status));
+  return data;
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- 认证 ----------
+function switchAuthTab(m) {
+  authMode = m;
+  document.getElementById('tabLogin').classList.toggle('active', m === 'login');
+  document.getElementById('tabRegister').classList.toggle('active', m === 'register');
+  document.getElementById('authBtn').textContent = m === 'login' ? '登 录' : '注 册';
+  document.getElementById('authMsg').textContent = '';
+}
+async function submitAuth() {
+  const u = document.getElementById('authUsername').value.trim();
+  const p = document.getElementById('authPassword').value;
+  const msg = document.getElementById('authMsg');
+  if (!u || !p) { msg.textContent = '请输入用户名和密码'; msg.className = 'auth-msg error'; return; }
+  const btn = document.getElementById('authBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span>请稍候';
+  try {
+    if (authMode === 'register') {
+      await api('/auth/register', { method: 'POST', body: JSON.stringify({ username: u, password: p }) });
+      msg.textContent = '注册成功，请登录'; msg.className = 'auth-msg success';
+      switchAuthTab('login');
+    } else {
+      const data = await api('/auth/login', { method: 'POST', body: JSON.stringify({ username: u, password: p }) });
+      token = data.data.token; username = u;
+      localStorage.setItem('token', token);
+      localStorage.setItem('username', u);
+      enterApp();
+    }
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'auth-msg error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = authMode === 'login' ? '登 录' : '注 册';
+  }
+}
+function enterApp() {
+  document.getElementById('authWrap').style.display = 'none';
+  const app = document.getElementById('app');
+  app.style.display = 'flex';
+  document.getElementById('userBadge').textContent = '👤 ' + username;
+  loadFavorites();
+  loadProfile();
+}
+
+// ---------- 用户档案（已有解析结果直接展示，无需重复解析） ----------
+async function loadProfile() {
+  if (!token) return;
+  try {
+    const data = await api('/api/v1/profile');
+    if (data.data && data.data.profile) renderStoredProfile(data.data.profile, data.data.session_id);
+  } catch (e) { /* 无档案时保持空态 */ }
+}
+function renderStoredProfile(profile, sessionId) {
+  const area = document.getElementById('resultArea');
+  let html = '<span class="status-badge success">✓ 你的条件档案</span>';
+  html += '<div class="confidence-bar"><div class="label">来源：最近一次解析 · 会话 ' + esc(sessionId) + '（重新解析可覆盖更新）</div></div>';
+  html += '<div class="profile-grid">';
+  for (const k in FIELD_LABELS) {
+    html += '<div class="profile-item"><div class="k">' + FIELD_LABELS[k] + '</div>' + fieldVal(profile[k]) + '</div>';
+  }
+  html += '</div>';
+  area.innerHTML = html;
+}
+function logout() {
+  token = ''; username = '';
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('authWrap').style.display = 'flex';
+}
+
+// ---------- 面板切换 ----------
+function switchPanel(name) {
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+  if (name === 'favorites') loadFavorites();
+}
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.mode-chip').forEach(c => c.classList.toggle('active', c.dataset.mode === m));
+}
+
+// ---------- 图片上传 ----------
+function onFileChange(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { toast('图片不能超过 5MB', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    imageBase64 = reader.result.split(',')[1];
+    document.getElementById('uploadTip').innerHTML = '✅ 已选择：' + esc(file.name) + '<br><img src="' + reader.result + '">';
+  };
+  reader.readAsDataURL(file);
+}
+const uploadBox = document.getElementById('uploadBox');
+uploadBox.addEventListener('dragover', e => { e.preventDefault(); uploadBox.classList.add('dragover'); });
+uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('dragover'));
+uploadBox.addEventListener('drop', e => {
+  e.preventDefault(); uploadBox.classList.remove('dragover');
+  if (e.dataTransfer.files.length) {
+    document.getElementById('fileInput').files = e.dataTransfer.files;
+    onFileChange({ target: { files: e.dataTransfer.files } });
+  }
+});
+
+// ---------- 条件解析 ----------
+const FIELD_LABELS = {
+  education: '学历', major: '专业', major_category: '专业大类',
+  political_status: '政治面貌', is_fresh_graduate: '应届身份',
+  target_provinces: '目标省份', work_experience_years: '基层经验(年)',
+  gender: '性别', age: '年龄', other_requirements: '其他要求'
+};
+function fieldVal(v) {
+  if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return '<span class="v null">未提及</span>';
+  if (v === true) return '<span class="v">✔ 是</span>';
+  if (v === false) return '<span class="v">✘ 否</span>';
+  return '<span class="v">' + esc(Array.isArray(v) ? v.join('、') : v) + '</span>';
+}
+async function submitParse() {
+  const text = document.getElementById('parseText').value.trim();
+  if (!text && !imageBase64) { toast('请输入条件描述或上传图片', 'error'); return; }
+  const btn = document.getElementById('parseBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading"></span>解析中...';
+  try {
+    // 多源融合：文本与毕业证图片可同时提交
+    const body = { content: text, mode };
+    if (imageBase64) body.images = [{ type: 'diploma_image', base64: imageBase64 }];
+    const data = await api('/api/v1/parse', { method: 'POST', body: JSON.stringify(body) });
+    lastParseResult = data.data;
+    renderParseResult(data.data);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '开始解析';
+  }
+}
+function renderParseResult(r) {
+  const area = document.getElementById('resultArea');
+  const profile = r.profile || r.profile_partial || {};
+  let html = '<span class="status-badge ' + r.status + '">' +
+    (r.status === 'success' ? '✓ 解析成功' : '⚠ 需要确认部分字段') + '</span>';
+  html += '<div class="confidence-bar"><div class="track"><div class="fill" style="width:' +
+    Math.round((r.confidence || 0) * 100) + '%"></div></div>' +
+    '<div class="label">整体置信度 ' + Math.round((r.confidence || 0) * 100) + '% · 会话 ' + esc(r.session_id) + '</div></div>';
+  html += '<div class="profile-grid">';
+  for (const k in FIELD_LABELS) {
+    html += '<div class="profile-item"><div class="k">' + FIELD_LABELS[k] + '</div>' + fieldVal(profile[k]) + '</div>';
+  }
+  html += '</div>';
+
+  if (r.status === 'need_confirm' && r.uncertain_fields && r.uncertain_fields.length) {
+    html += '<div class="confirm-box"><h4>⚠ 以下字段需要你确认</h4>';
+    r.uncertain_fields.forEach(f => {
+      html += '<div class="confirm-field">' +
+        '<span class="fname">' + esc(FIELD_LABELS[f.field] || f.field) + '</span>' +
+        '<input data-field="' + esc(f.field) + '" placeholder="' + esc(f.suggested_value ? '建议：' + f.suggested_value : '请输入') + '" value="' + esc(f.suggested_value || '') + '">' +
+        '<span class="reason">' + esc(f.reason || '') + (f.raw_text ? '（识别原文：' + esc(f.raw_text) + '）' : '') + '</span>' +
+        '</div>';
+    });
+    html += '<button class="btn-primary" style="margin-top:8px" onclick="submitConfirm()">确认提交</button></div>';
+  }
+  area.innerHTML = html;
+}
+async function submitConfirm() {
+  if (!lastParseResult) return;
+  const fields = {};
+  document.querySelectorAll('.confirm-field input').forEach(inp => {
+    if (inp.value.trim()) fields[inp.dataset.field] = inp.value.trim();
+  });
+  if (!Object.keys(fields).length) { toast('请至少填写一个确认字段', 'error'); return; }
+  try {
+    const data = await api('/api/v1/parse/confirm', {
+      method: 'POST',
+      body: JSON.stringify({
+        session_id: lastParseResult.session_id,
+        profile_partial: lastParseResult.profile_partial,
+        confirmed_fields: fields
+      })
+    });
+    lastParseResult = data.data;
+    renderParseResult(data.data);
+    toast('确认成功，条件已完善', 'success');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ---------- 收藏 ----------
+async function loadFavorites() {
+  if (!token) return;
+  try {
+    const data = await api('/api/v1/favorites');
+    renderFavorites(data.data || []);
+  } catch (e) { /* 静默，列表区域保持 */ }
+}
+const CAT_NAMES = { rush: '🔥 冲刺', stable: '✅ 稳妥', safe: '🛡️ 保底', custom: '📌 自选' };
+function renderFavorites(list) {
+  const el = document.getElementById('favList');
+  if (!list.length) { el.innerHTML = '<div class="empty-tip">还没有收藏岗位，解析报告生成后可以收藏心仪岗位</div>'; return; }
+  let html = '<table class="fav-table"><thead><tr><th>岗位 ID</th><th>分类</th><th>报告</th><th>备注</th><th>收藏时间</th><th></th></tr></thead><tbody>';
+  list.forEach(f => {
+    const cat = CAT_NAMES[f.Category] || f.Category || '📌 自选';
+    const catClass = f.Category || 'custom';
+    const time = f.CreatedAt ? new Date(f.CreatedAt * 1000).toLocaleString('zh-CN') : '-';
+    html += '<tr><td><b>' + esc(f.PositionID) + '</b></td>' +
+      '<td><span class="cat-tag ' + esc(catClass) + '">' + cat + '</span></td>' +
+      '<td>' + esc(f.ReportID || '-') + '</td>' +
+      '<td>' + esc(f.Notes || '-') + '</td>' +
+      '<td style="color:var(--text-dim)">' + time + '</td>' +
+      '<td><button class="btn-danger" onclick="removeFavorite(\'' + esc(f.PositionID) + '\')">取消</button></td></tr>';
+  });
+  el.innerHTML = html + '</tbody></table>';
+}
+async function addFavorite() {
+  const posId = document.getElementById('favPosId').value.trim();
+  if (!posId) { toast('请输入岗位 ID', 'error'); return; }
+  try {
+    await api('/api/v1/favorites', {
+      method: 'POST',
+      body: JSON.stringify({
+        position_id: posId, action: 'add',
+        report_id: document.getElementById('favReportId').value.trim(),
+        category: document.getElementById('favCategory').value,
+        notes: document.getElementById('favNotes').value.trim()
+      })
+    });
+    toast('收藏成功', 'success');
+    document.getElementById('favPosId').value = '';
+    document.getElementById('favNotes').value = '';
+    loadFavorites();
+  } catch (e) { toast(e.message, 'error'); }
+}
+async function removeFavorite(posId) {
+  try {
+    await api('/api/v1/favorites', { method: 'POST', body: JSON.stringify({ position_id: posId, action: 'remove' }) });
+    toast('已取消收藏', 'success');
+    loadFavorites();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ---------- 对话 ----------
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  appendMsg('user', q);
+  try {
+    const data = await api('/api/v1/chat', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: lastParseResult ? lastParseResult.session_id : '', question: q })
+    });
+    appendMsg('assistant', data.data && data.data.answer ? data.data.answer : '（暂无回复）');
+  } catch (e) {
+    appendMsg('assistant', '🚧 ' + e.message + '。多轮追问能力正在建设中，当前可先使用条件解析与收藏功能。');
+  }
+}
+function appendMsg(role, text) {
+  const box = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + role;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ---------- 启动 ----------
+if (token && username) enterApp();
+</script>
+</body>
+</html>

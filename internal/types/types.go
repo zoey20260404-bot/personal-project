@@ -18,9 +18,27 @@ type UserProfile struct {
 
 // ImageInput 图片输入（多源融合解析用）。
 type ImageInput struct {
-	Type   string `json:"type"`   // 图片类型：diploma_image（毕业证/学位证）；position_image 预留给岗位分析
+	Type   string `json:"type"`   // 图片类型：见 ImageType 常量
 	Base64 string `json:"base64"` // 图片 Base64 编码内容
 }
+
+// 图片类型常量。
+const (
+	ImageTypeDiploma  = "diploma_image"  // 毕业证/学位证（条件解析）
+	ImageTypePosition = "position_image" // 职位表截图（预留给岗位分析链路）
+)
+
+// UserProfile 字段名常量：uncertain_fields / confirmed_fields 的 key 统一引用此处。
+const (
+	FieldEducation       = "education"
+	FieldMajor           = "major"
+	FieldMajorCategory   = "major_category"
+	FieldPoliticalStatus = "political_status"
+	FieldIsFreshGraduate = "is_fresh_graduate"
+	FieldTargetProvinces = "target_provinces"
+	FieldGender          = "gender"
+	FieldAge             = "age"
+)
 
 // UncertainField OCR/解析低置信度字段（PRD 2.1 OCR方案C）。
 type UncertainField struct {

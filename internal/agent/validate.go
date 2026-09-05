@@ -81,8 +81,8 @@ func normalizeProvinces(provinces []string, uncertain map[string]types.Uncertain
 			continue
 		}
 		// 非法值：剔除并标记
-		uncertain["target_provinces"] = types.UncertainField{
-			Field:      "target_provinces",
+		uncertain[types.FieldTargetProvinces] = types.UncertainField{
+			Field:      types.FieldTargetProvinces,
 			RawText:    p,
 			Confidence: 0.3,
 			Reason:     "无法识别的省份/城市，已从目标省份中剔除，请确认",
@@ -98,10 +98,10 @@ func checkCoreFields(profile *types.UserProfile, uncertain map[string]types.Unce
 		empty  bool
 		reason string
 	}{
-		{"education", profile.Education == "", "未获取到学历信息"},
-		{"major", profile.Major == "", "未获取到专业信息"},
-		{"political_status", profile.PoliticalStatus == "", "未获取到政治面貌信息"},
-		{"is_fresh_graduate", profile.IsFreshGraduate == nil, "用户未提及应届身份"},
+		{types.FieldEducation, profile.Education == "", "未获取到学历信息"},
+		{types.FieldMajor, profile.Major == "", "未获取到专业信息"},
+		{types.FieldPoliticalStatus, profile.PoliticalStatus == "", "未获取到政治面貌信息"},
+		{types.FieldIsFreshGraduate, profile.IsFreshGraduate == nil, "用户未提及应届身份"},
 	}
 	for _, c := range coreChecks {
 		if c.empty {
@@ -118,20 +118,24 @@ func checkCoreFields(profile *types.UserProfile, uncertain map[string]types.Unce
 
 // coreFields 核心字段集合：只有核心字段的不确定才会触发 need_confirm。
 var coreFields = map[string]bool{
-	"education": true, "major": true, "major_category": true,
-	"political_status": true, "is_fresh_graduate": true, "target_provinces": true,
+	types.FieldEducation: true, types.FieldMajor: true, types.FieldMajorCategory: true,
+	types.FieldPoliticalStatus: true, types.FieldIsFreshGraduate: true, types.FieldTargetProvinces: true,
 }
 
 // pruneUncertainFields 清理不确定字段列表：
-// 1. 字段已有确定值却仍被列为不确定（LLM 自相矛盾）→ 移除；
+// 1. 字段已有确定值且不含建议值（纯"未提及"类，LLM 自相矛盾）→ 移除；
 // 2. 非核心可选字段（性别/年龄等）→ 移除，不阻塞确认流程。
+// 注意：带 SuggestedValue 的条目（多源冲突/OCR 纠错建议）即使字段有值也必须保留。
 func pruneUncertainFields(profile *types.UserProfile, uncertain map[string]types.UncertainField) {
 	for field, uf := range uncertain {
 		if !coreFields[field] {
 			delete(uncertain, field)
 			continue
 		}
-		_ = uf
+		// 冲突/纠错类条目（带建议值）保留，让用户确认
+		if uf.SuggestedValue != "" {
+			continue
+		}
 		if fieldHasValue(profile, field) {
 			delete(uncertain, field)
 		}
@@ -141,17 +145,17 @@ func pruneUncertainFields(profile *types.UserProfile, uncertain map[string]types
 // fieldHasValue 判断核心字段是否已有确定值。
 func fieldHasValue(profile *types.UserProfile, field string) bool {
 	switch field {
-	case "education":
+	case types.FieldEducation:
 		return profile.Education != ""
-	case "major":
+	case types.FieldMajor:
 		return profile.Major != ""
-	case "major_category":
+	case types.FieldMajorCategory:
 		return profile.MajorCategory != ""
-	case "political_status":
+	case types.FieldPoliticalStatus:
 		return profile.PoliticalStatus != ""
-	case "is_fresh_graduate":
+	case types.FieldIsFreshGraduate:
 		return profile.IsFreshGraduate != nil
-	case "target_provinces":
+	case types.FieldTargetProvinces:
 		return len(profile.TargetProvinces) > 0
 	}
 	return false

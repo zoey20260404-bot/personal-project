@@ -36,6 +36,19 @@ C. is_fresh_graduate 是三态字段：明确说"应届/今年毕业/2026届"→
 【输出要求】
 严格输出 JSON（不要输出任何其他文字、不要用 markdown 代码块），结构同示例。confidence 为整体置信度（0-1），存在不确定字段时不得高于 0.8。`
 
+	// PromptParserDiploma 毕业证/学位证解析系统提示词（图片专用变体）。
+	// 与文本解析共用输出契约（UserProfile JSON），但聚焦证件关键字段：学历与专业。
+	PromptParserDiploma = `角色：你是证件识别专家，负责从毕业证/学位证图片中提取报考人条件。
+
+【提取重点】
+1. 学历（education）：以证书为准——"本科"/"硕士研究生"→硕士/"专科"→大专/等。
+2. 专业（major）：提取证书上的专业全称，并给出所属专业大类（major_category，如"计算机类"）。
+3. 其他字段（政治面貌/应届/省份等）：证件上没有的信息一律留空/置 null，并加入 uncertain_fields，禁止编造。
+
+【输出要求】
+严格输出与文本解析相同的 JSON 结构（profile + confidence + uncertain_fields），
+不要输出任何其他文字、不要用 markdown 代码块。`
+
 	// PromptParserImageUser 图片解析的用户提示词模板（{{.Kind}} 为图片类型描述）。
 	PromptParserImageUser = `请识别这张{{.Kind}}图片中的文字信息，并抽取与报考人条件相关的字段（毕业证请重点抽取学历与专业名称；职位表请抽取岗位要求的学历、专业、政治面貌、应届、基层年限等），按系统约定的 JSON 格式输出，未识别到的字段一律留空并加入 uncertain_fields，不要猜测。`
 )

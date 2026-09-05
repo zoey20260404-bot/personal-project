@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync"
 
 	"ai-start/internal/llm"
 	"ai-start/internal/prompt"
 	"ai-start/internal/types"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // ParserAgent 条件解析引擎（PRD 2.1 模块1）。
@@ -28,7 +32,7 @@ func NewParserAgent(manager *llm.Manager, channel string, prompts *prompt.Store,
 		channel = llm.ChannelChat
 	}
 	if promptName == "" {
-		promptName = "parser"
+		promptName = prompt.NameParser
 	}
 	return &ParserAgent{llm: manager, channel: channel, prompts: prompts, promptName: promptName}
 }
@@ -47,42 +51,63 @@ func (p *ParserAgent) systemPrompt() string {
 }
 
 // ParseMulti 多源融合解析：文本 + 图片（毕业证/学位证）一次解析为一份画像。
-// 融合规则由代码层执行（见 merge.go），不让 LLM 做判定。
+// 文本与各图片的解析互不依赖，并行执行（errgroup），最后由代码层融合（见 merge.go）。
 func (p *ParserAgent) ParseMulti(ctx context.Context, content string, images []types.ImageInput) (*ParseResult, error) {
-	var textProfile *UserProfile
-	var imageProfiles []*UserProfile
-	var uncertain []UncertainField
-
-	// 文本来源
-	if content != "" {
-		r, err := p.ParseText(ctx, content)
-		if err != nil {
-			return nil, err
+	// 图片类型前置校验（快速失败，不进并行）
+	for _, img := range images {
+		if img.Type != types.ImageTypeDiploma {
+			return nil, fmt.Errorf("暂不支持的图片类型 %q（当前仅支持毕业证/学位证）", img.Type)
 		}
-		textProfile = r.Profile
-		if textProfile == nil {
-			textProfile = r.ProfilePartial
-		}
-		uncertain = append(uncertain, r.UncertainFields...)
 	}
 
-	// 图片来源（当前仅支持毕业证/学位证；职位表截图属于岗位分析链路，后续迭代）
-	for _, img := range images {
-		if img.Type != "diploma_image" {
-			return nil, fmt.Errorf("暂不支持的图片类型 %q（当前仅支持 diploma_image）", img.Type)
-		}
-		r, err := p.ParseImage(ctx, img.Base64, "毕业证/学位证")
-		if err != nil {
-			return nil, err
-		}
-		ip := r.Profile
-		if ip == nil {
-			ip = r.ProfilePartial
-		}
-		if ip != nil {
-			imageProfiles = append(imageProfiles, ip)
-		}
-		uncertain = append(uncertain, r.UncertainFields...)
+	var (
+		textProfile   *UserProfile
+		imageProfiles = make([]*UserProfile, len(images))
+		uncertain     []UncertainField
+		mu            sync.Mutex // 保护 uncertain 并发追加
+	)
+
+	g, gctx := errgroup.WithContext(ctx)
+
+	// 文本来源（并行）
+	if content != "" {
+		g.Go(func() error {
+			r, err := p.ParseText(gctx, content)
+			if err != nil {
+				return err
+			}
+			textProfile = r.Profile
+			if textProfile == nil {
+				textProfile = r.ProfilePartial
+			}
+			mu.Lock()
+			uncertain = append(uncertain, r.UncertainFields...)
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	// 图片来源（并行，当前仅支持毕业证/学位证；职位表截图属于岗位分析链路，后续迭代）
+	for i, img := range images {
+		g.Go(func() error {
+			r, err := p.ParseImage(gctx, img.Base64, "毕业证/学位证")
+			if err != nil {
+				return err
+			}
+			ip := r.Profile
+			if ip == nil {
+				ip = r.ProfilePartial
+			}
+			imageProfiles[i] = ip
+			mu.Lock()
+			uncertain = append(uncertain, r.UncertainFields...)
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	if textProfile == nil {
@@ -125,17 +150,23 @@ func (p *ParserAgent) ParseText(ctx context.Context, content string) (*ParseResu
 	return p.buildResult(resp.Content, "text")
 }
 
-// ParseImage 解析图片输入（职位表截图/毕业证），kind 为 human 可读的图片类型名。
-// 通过视觉大模型完成 OCR+结构化抽取；未配置视觉渠道时使用 Mock 结果演示 need_confirm 流程。
+// ParseImage 解析图片输入（毕业证/学位证），kind 为 human 可读的图片类型名。
+// 系统提示词使用证件专用变体（prompt.NameParserDiploma），聚焦学历/专业提取；
+// 未配置视觉渠道时使用 Mock 结果演示 need_confirm 流程。
 func (p *ParserAgent) ParseImage(ctx context.Context, imageBase64, kind string) (*ParseResult, error) {
 	if !p.llm.Has(llm.ChannelVision) {
 		return p.parseImageFallback(), nil
 	}
-	user := p.prompts.Get("parser_image_user")
-	if rendered, err := p.prompts.Render("parser_image_user", map[string]any{"Kind": kind}); err == nil {
+	user := p.prompts.Get(prompt.NameParserImageUser)
+	if rendered, err := p.prompts.Render(prompt.NameParserImageUser, map[string]any{"Kind": kind}); err == nil {
 		user = rendered
 	}
-	out, err := p.llm.ChatWithImage(ctx, p.systemPrompt(), user, imageBase64)
+	// 证件专用系统提示词（缺失时回退文本解析默认）
+	sys := p.prompts.Get(prompt.NameParserDiploma)
+	if sys == "" {
+		sys = p.systemPrompt()
+	}
+	out, err := p.llm.ChatWithImage(ctx, sys, user, imageBase64)
 	if err != nil {
 		return nil, fmt.Errorf("图片解析失败: %w", err)
 	}
@@ -143,10 +174,48 @@ func (p *ParserAgent) ParseImage(ctx context.Context, imageBase64, kind string) 
 }
 
 // llmOutput LLM 原始输出结构（与系统提示词约定的 JSON 对应）。
+// 小模型输出类型不稳定（confidence 可能是数字或字符串、uncertain_fields 可能是数组或对象），
+// 全部用 RawMessage 接收后容错解析。
 type llmOutput struct {
-	Profile         UserProfile      `json:"profile"`
-	Confidence      float64          `json:"confidence"`
-	UncertainFields []UncertainField `json:"uncertain_fields"`
+	Profile         UserProfile     `json:"profile"`
+	Confidence      json.RawMessage `json:"confidence"`
+	UncertainFields json.RawMessage `json:"uncertain_fields"`
+}
+
+// parseConfidence 容错解析置信度：兼容数字与数字字符串（如 "0.8"）。
+func parseConfidence(raw json.RawMessage) float64 {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0
+	}
+	var f float64
+	if err := json.Unmarshal(raw, &f); err == nil {
+		return f
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		if v, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
+			return v
+		}
+	}
+	return 0
+}
+
+// parseUncertainFields 容错解析 uncertain_fields：兼容数组、单个对象、null。
+// 小模型输出格式不稳定，不能假设一定是数组。
+func parseUncertainFields(raw json.RawMessage) []UncertainField {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var list []UncertainField
+	if err := json.Unmarshal(raw, &list); err == nil {
+		return list
+	}
+	// 单个对象 → 包装为单元素数组
+	var single UncertainField
+	if err := json.Unmarshal(raw, &single); err == nil && single.Field != "" {
+		return []UncertainField{single}
+	}
+	return nil
 }
 
 // buildResult 将 LLM 输出构建为 ParseResult：
@@ -160,8 +229,8 @@ func (p *ParserAgent) buildResult(raw, parsedFrom string) (*ParseResult, error) 
 	result := &ParseResult{
 		Status:          StatusSuccess,
 		Profile:         &out.Profile,
-		Confidence:      out.Confidence,
-		UncertainFields: out.UncertainFields,
+		Confidence:      parseConfidence(out.Confidence),
+		UncertainFields: parseUncertainFields(out.UncertainFields),
 		ParsedFrom:      parsedFrom,
 	}
 	// 规则校验兜底：不依赖模型自觉（PRD 2.1 的置信度规则在此强制执行）
@@ -192,15 +261,15 @@ func Confirm(partial *UserProfile, confirmed map[string]string) *UserProfile {
 	merged := *partial // 拷贝，避免修改缓存中的原对象
 	for field, value := range confirmed {
 		switch field {
-		case "education":
+		case types.FieldEducation:
 			merged.Education = value
-		case "major":
+		case types.FieldMajor:
 			merged.Major = value
-		case "major_category":
+		case types.FieldMajorCategory:
 			merged.MajorCategory = value
-		case "political_status":
+		case types.FieldPoliticalStatus:
 			merged.PoliticalStatus = value
-		case "gender":
+		case types.FieldGender:
 			merged.Gender = value
 		}
 	}

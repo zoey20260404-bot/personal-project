@@ -125,6 +125,33 @@ func TestValidateContradictoryUncertain(t *testing.T) {
 	}
 }
 
+// TestValidateKeepsConflict 验证多源冲突条目（带建议值）即使字段有值也必须保留确认。
+func TestValidateKeepsConflict(t *testing.T) {
+	result := &ParseResult{
+		Status: StatusSuccess,
+		Profile: &types.UserProfile{
+			Education:       "硕士", // 证件值（与文本冲突）
+			Major:           "软件工程",
+			PoliticalStatus: "中共党员",
+			IsFreshGraduate: boolPtr(false),
+			TargetProvinces: []string{"广东"},
+		},
+		Confidence: 1.0,
+		UncertainFields: []types.UncertainField{
+			// 融合层标记的冲突：字段有值（用了证件），但需用户确认
+			{Field: "education", RawText: "本科", Confidence: 0.5, SuggestedValue: "硕士", Reason: "文本与证件不一致"},
+		},
+	}
+	out := validateResult(result)
+
+	if len(out.UncertainFields) != 1 || out.UncertainFields[0].Field != "education" {
+		t.Errorf("冲突条目应保留, got %v", out.UncertainFields)
+	}
+	if out.Status != StatusNeedConfirm {
+		t.Errorf("存在冲突应触发 need_confirm, got %q", out.Status)
+	}
+}
+
 // TestValidateCompleteProfile 验证字段完整时保持 success 且置信度不被压低。
 func TestValidateCompleteProfile(t *testing.T) {
 	result := &ParseResult{

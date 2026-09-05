@@ -29,9 +29,9 @@ func mergeProfiles(textProfile *types.UserProfile, imageProfiles []*types.UserPr
 	}
 
 	// 学历：证件优先，冲突标记
-	merged.Education = mergeAuthoritative(textProfile.Education, diplomaEdu, "education", &uncertain)
+	merged.Education = mergeAuthoritative(textProfile.Education, diplomaEdu, types.FieldEducation, &uncertain)
 	// 专业：证件优先，冲突标记
-	merged.Major = mergeAuthoritative(textProfile.Major, diplomaMajor, "major", &uncertain)
+	merged.Major = mergeAuthoritative(textProfile.Major, diplomaMajor, types.FieldMajor, &uncertain)
 	if merged.MajorCategory == "" && merged.Major != "" {
 		merged.MajorCategory = majorCategoryOf(merged.Major)
 	}
@@ -88,7 +88,7 @@ func mergeFreshGraduate(textVal, imgVal *bool, uncertain *[]types.UncertainField
 	}
 	// 冲突：采用文本自述，标记确认
 	*uncertain = append(*uncertain, types.UncertainField{
-		Field:          "is_fresh_graduate",
+		Field:          types.FieldIsFreshGraduate,
 		RawText:        fmt.Sprintf("文本=%v", *textVal),
 		Confidence:     0.5,
 		SuggestedValue: fmt.Sprintf("证件=%v", *imgVal),

@@ -15,3 +15,8 @@ logs/
 
 # 本地配置（含密钥，不入库）
 configs/config.yaml
+
+# 过程性工作文档（约定命名，不入库；PRD 与技术设计文档正常入库）
+# 规则：docs 下所有 *-todo.md（迭代待办）与 *-issues.md（问题记录）类文件
+docs/**/*-todo.md
+docs/**/*-issues.md

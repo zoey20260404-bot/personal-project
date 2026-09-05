@@ -31,13 +31,13 @@ func BuildRuntime(agentCfgs map[string]config.AgentConfig, runtimeCfg config.Run
 
 	for name, ac := range agentCfgs {
 		switch ac.Type {
-		case "parser":
+		case AgentTypeParser:
 			rt.Register(NewParserNode(name, ac, manager, prompts, runtimeCfg.NodeInbox))
-		case "react":
+		case AgentTypeReact:
 			react := NewReActAgent(name, ac.Model, prompts, ac.Prompt, ac.MaxSteps, ac.Temperature, manager, tools, ac.Tools, logger)
 			rt.Register(NewReActNode(name, react, runtimeCfg.NodeInbox))
 		default:
-			return nil, fmt.Errorf("Agent %q 类型 %q 未支持（内置类型：parser / react）", name, ac.Type)
+			return nil, fmt.Errorf("Agent %q 类型 %q 未支持", name, ac.Type)
 		}
 	}
 	return rt, nil

@@ -1,6 +1,7 @@
 # feat001 智能选岗参谋 — 技术设计文档
 
 > 对应需求文档：[choose-job20260905.md](choose-job20260905.md)
+> 相关文档：[测试问题记录](test-issues.md) · [后续迭代 TODO](iteration-todo.md)
 > 本文档随开发过程同步更新（见 docs/rule.md 第 3 条）。
 
 ## 1. 技术选型
@@ -82,7 +83,7 @@ Supervisor（调度中枢，不持有 Agent 实例，只发消息）
 | `/health` | GET | 健康检查（公开） | 已实现 |
 | `/auth/register` | POST | 用户注册（bcrypt 密码存储） | 已实现 |
 | `/auth/login` | POST | 用户登录，返回 JWT | 已实现 |
-| `/api/v1/parse` | POST | 条件解析（text / image），低置信度返回 need_confirm + session_id；条件快照落 MySQL | 已实现（JWT） |
+| `/api/v1/parse` | POST | 条件解析（文本 + 毕业证图片多源融合），低置信度返回 need_confirm；快照落 MySQL | 已实现（JWT） |
 | `/api/v1/parse/confirm` | POST | 确认修正低置信度字段，合并返回完整 profile | 已实现（JWT） |
 | `/api/v1/profile` | GET | 用户条件档案（最近一次解析快照，解析页直接展示） | 已实现（JWT） |
 | `/api/v1/favorites` | POST/GET | 收藏/取消收藏岗位、收藏列表（按登录用户隔离） | 已实现（JWT） |
@@ -115,6 +116,16 @@ Supervisor（调度中枢，不持有 Agent 实例，只发消息）
 - `/parse/confirm` 请求由客户端原样带回 `profile_partial` + 用户确认字段，服务端合并落库
 - 理由：待确认数据本就是用户自己的数据，无防篡改需求；无状态更简单、天然支持水平扩展，少维护一个 Redis 依赖
 
+### 4.3 多源融合解析
+
+`/parse` 支持文本 + 多张图片一次提交（`content` + `images[]`），融合出一份画像：
+
+- **并行执行**：文本与各图片的解析互不依赖，errgroup 并行发起 LLM 调用，总耗时≈最慢一路
+- **方向约束**：文本与毕业证同属"用户条件"方向；职位表截图属于"岗位要求"方向，已从解析页移除，待选岗分析链路实现
+- **融合规则**（代码层，`agent/merge.go`）：证件优先（学历/专业）、冲突检测进确认、其余字段互补、省份并集、应届三态合并
+- 融合结果统一过规则校验层（`validateResult`）；冲突条目（带建议值）即使字段有值也保留确认
+- **LLM 输出容错**：小模型输出格式不稳定（confidence 可能是字符串、uncertain_fields 可能是对象），统一 RawMessage 接收后容错解析（`parseConfidence` / `parseUncertainFields`）
+
 ### 4.1 用户与鉴权
 
 - 注册 `POST /auth/register`、登录 `POST /auth/login`（返回 JWT，HS256，默认 72h）
@@ -129,8 +140,20 @@ Supervisor（调度中枢，不持有 Agent 实例，只发消息）
 
 Prompt 是代码资产，以 **Go 常量**集中定义在 `internal/prompt/prompts_*.go`（按业务域分文件），注册进 `prompt.Defaults` 表：
 
-- **多变体**：一个 Agent 可拥有多个 Prompt 常量（如 `PromptAssistant` / `PromptAssistantBeginner` / `PromptAssistantAdvanced`），运行时按场景（模式/流程阶段）选用，`agents.*.prompt` 只是默认名
+- **多变体**：一个 Agent 可拥有多个 Prompt 常量（如 `PromptAssistant` / `PromptAssistantBeginner` / `PromptAssistantAdvanced`、文本解析 `PromptParser` / 证件解析 `PromptParserDiploma`），运行时按场景（模式/输入类型）选用，`agents.*.prompt` 只是默认名
 - **模板变量**：支持 text/template（如 `{{.Mode}}`、`{{.Kind}}`），按场景动态渲染
-- **新增 Prompt**：在对应 `prompts_*.go` 中定义常量，并在 `defaults.go` 登记
+- **命名规范**：Prompt 名常量在 `internal/prompt/names.go` 集中定义（`NameXxx`），`defaults.go` 按常量注册——禁止在业务代码里写字面量 key
+- **新增 Prompt**：在对应 `prompts_*.go` 中定义常量 → `names.go` 定义名字 → `defaults.go` 登记
 
-当前内置：`parser`、`parser_image_user`、`assistant`、`assistant_beginner`、`assistant_advanced`。
+当前内置：`parser`、`parser_diploma`、`parser_image_user`、`assistant`、`assistant_beginner`、`assistant_advanced`。
+
+## 6. 常量约定
+
+为可查找性，以下 key 一律使用常量，禁止魔法字符串：
+
+- Prompt 名：`internal/prompt/names.go`（`prompt.NameXxx`）
+- 模型渠道名：`internal/llm`（`llm.ChannelChat` 等）
+- Agent 类型：`internal/agent`（`agent.AgentTypeParser` / `AgentTypeReact`）
+- 流程名：`internal/agent/supervisor.go`（`agent.FlowParse`）
+- UserProfile 字段名：`internal/types`（`types.FieldXxx`，用于 uncertain/confirmed 字段 key）
+- 图片类型：`internal/types`（`types.ImageTypeDiploma` / `ImageTypePosition`）

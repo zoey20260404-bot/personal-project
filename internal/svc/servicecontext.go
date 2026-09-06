@@ -24,6 +24,7 @@ import (
 	"ai-start/internal/runtime"
 	"ai-start/internal/store"
 	"ai-start/internal/tool"
+	"ai-start/internal/types"
 )
 
 // ServiceContext 应用服务上下文：所有共享依赖的载体。
@@ -38,6 +39,8 @@ type ServiceContext struct {
 	Redis        *redis.Client         // 通用缓存客户端（预留给后续业务），nil 表示不可用
 	Memory       *agent.Memory         // 长期记忆模块（三层作用域）
 	Services     *logic.Services       // 业务服务集合（user/favorite/parse）
+	Chat         *logic.ChatService    // 多轮对话编排（feat002）
+	ChatBuffer   store.ChatBuffer      // 短期会话缓冲（Redis/内存降级）
 	Tools        *tool.Registry        // 工具注册表
 	Runtime      *runtime.Runtime      // 多 Agent 运行时（去中心化总线）
 	Flows        *runtime.FlowExecutor // 流程编排器
@@ -98,9 +101,23 @@ func NewServiceContext(cfg *config.Config) (*ServiceContext, error) {
 		svc.Redis = rc
 	}
 
-	// 工具注册表（ReAct Agent 通过 function calling 调用）
+	// 工具注册表（ReAct Agent 通过 function calling 调用，白名单由各 Agent 配置声明）
+	// 工具实现为薄壳：业务逻辑委托 logic 层（闭包延迟取 svc.Services，装配顺序无关）
 	svc.Tools = tool.NewRegistry()
-	svc.Tools.Register(&tool.QueryPositionsTool{})
+	svc.Tools.Register(tool.NewQueryPositionsTool(func(ctx context.Context, f store.PositionFilter) ([]store.Position, int64, error) {
+		return svc.Services.Position.Query(f)
+	}))
+	svc.Tools.Register(tool.NewGetProfileTool(func(ctx context.Context, userID uint64) (*types.UserProfile, error) {
+		profile, _, err := svc.Services.Parse.GetLatestProfile(userID)
+		return profile, err
+	}))
+	svc.Tools.Register(tool.NewUpdateProfileTool(func(ctx context.Context, userID uint64, text string) (*types.UserProfile, []string, error) {
+		return svc.Services.Parse.UpdateFromText(ctx, userID, text)
+	}))
+	svc.Tools.Register(tool.NewAddFavoriteTool(func(ctx context.Context, userID uint64, positionID string) error {
+		_, err := svc.Services.Favorite.Add(userID, store.Favorite{PositionID: positionID})
+		return err
+	}))
 
 	// 多 Agent 运行时（去中心化总线架构）+ 流程编排器
 	rt, err := agent.BuildRuntime(cfg.Agents, cfg.Runtime, svc.Models, svc.Prompts, svc.Tools, logger)
@@ -121,6 +138,15 @@ func NewServiceContext(cfg *config.Config) (*ServiceContext, error) {
 
 	// 业务服务层：Handler 经此调用业务逻辑（api 层不直接触碰存储）
 	svc.Services = logic.NewServices(svc.MySQL, svc.Supervisor, svc.JWTSecret, cfg.JWT.ExpireHours, logger)
+
+	// 短期会话缓冲：Redis 优先，不可用降级内存
+	if svc.Redis != nil {
+		svc.ChatBuffer = store.NewRedisChatBuffer(svc.Redis)
+	} else {
+		svc.ChatBuffer = store.NewMemoryChatBuffer()
+	}
+	// 多轮对话编排（feat002：路由 + ReAct + 记忆）
+	svc.Chat = logic.NewChatService(svc.Runtime, svc.Memory, svc.ChatBuffer, svc.Services.Parse, logger)
 
 	return svc, nil
 }

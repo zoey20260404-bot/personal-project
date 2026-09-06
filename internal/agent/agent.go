@@ -16,4 +16,5 @@ type Agent interface {
 const (
 	AgentTypeParser = "parser" // 条件解析 Agent
 	AgentTypeReact  = "react"  // ReAct 推理-行动循环 Agent
+	AgentTypeRouter = "router" // 意图路由 Agent（feat002）
 )

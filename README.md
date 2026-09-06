@@ -140,7 +140,21 @@ export EMBEDDING_API_KEY=硅基流动key # https://cloud.siliconflow.cn 注册
 go run ./cmd/server
 ```
 
-启动后浏览器访问 http://localhost:8080 即可使用前端页面（登录/注册 → 条件解析 → 确认修正 → 收藏）。
+启动后浏览器访问 http://localhost:8080 即可使用前端页面（登录/注册 → 条件解析 → 确认修正 → 收藏 → 多轮追问）。
+
+## 职位表数据导入
+
+历年职位表为官方 Excel（国考：bm.scs.gov.cn 年度考录专题；省考：各省人事考试网），用独立脚本导入（不影响主服务）：
+
+```bash
+# 预览解析结果（不入库）
+go run ./scripts/import_positions --file 职位表.xlsx --exam-type 国考 --year 2025 --province 国家 --dry-run
+
+# 正式导入
+go run ./scripts/import_positions --file 职位表.xlsx --exam-type 省考 --year 2025 --province 广东
+```
+
+表头按关键词包含匹配，兼容国考/省考常见变体（部门名称/用人司局/招录单位等）。
 
 启动后可用接口：
 

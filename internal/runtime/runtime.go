@@ -14,6 +14,9 @@ var ErrNodePanic = errors.New("节点处理消息时发生 panic")
 // ErrNodeNotFound 目标节点不存在。
 var ErrNodeNotFound = errors.New("目标 Agent 节点不存在")
 
+// DefaultCallTimeout 节点调用默认超时（业务方可按需覆盖）。
+const DefaultCallTimeout = 30 * time.Second
+
 // Runtime 多 Agent 运行时：持有消息总线与所有节点，
 // 负责节点生命周期（启动/优雅退出）与消息分发。
 type Runtime struct {
@@ -42,6 +45,12 @@ func (r *Runtime) Register(node *Node) {
 // Bus 暴露总线（供 Supervisor 等发起请求-响应调用）。
 func (r *Runtime) Bus() *Bus {
 	return r.bus
+}
+
+// HasNode 节点是否存在（路由目标合法性校验用）。
+func (r *Runtime) HasNode(name string) bool {
+	_, ok := r.nodes[name]
+	return ok
 }
 
 // Start 启动所有节点（各自独立 goroutine）与消息分发协程。
@@ -109,10 +118,15 @@ func (r *Runtime) tryDeliver(node *Node, msg Message) {
 
 // Call 同步调用目标节点（请求-响应），timeout 为等待回复的超时时间。
 func (r *Runtime) Call(ctx context.Context, from, to, msgType, content string, timeout time.Duration) (Message, error) {
+	return r.CallWithSink(ctx, from, to, msgType, content, timeout, nil)
+}
+
+// CallWithSink 同 Call，额外支持流式事件回传（sink 接收节点处理过程中的事件）。
+func (r *Runtime) CallWithSink(ctx context.Context, from, to, msgType, content string, timeout time.Duration, sink EventSink) (Message, error) {
 	if _, ok := r.nodes[to]; !ok {
 		return Message{}, ErrNodeNotFound
 	}
-	return r.bus.Call(ctx, from, to, msgType, content, timeout)
+	return r.bus.Call(ctx, from, to, msgType, content, timeout, sink)
 }
 
 // Shutdown 优雅退出：取消所有节点 context 并等待退出完成。

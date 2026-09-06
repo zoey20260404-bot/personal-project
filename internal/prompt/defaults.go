@@ -9,4 +9,6 @@ var Defaults = map[string]string{
 	NameAssistant:         PromptAssistant,         // 通用问答（默认）
 	NameAssistantBeginner: PromptAssistantBeginner, // 通用问答-0 基础模式
 	NameAssistantAdvanced: PromptAssistantAdvanced, // 通用问答-进阶模式
+	NameRouter:            PromptRouter,            // 意图路由（feat002）
+	NameAdvisor:           PromptAdvisor,           // 选岗参谋（feat002）
 }

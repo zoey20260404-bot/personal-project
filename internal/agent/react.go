@@ -17,6 +17,11 @@ type LLMCaller interface {
 	ChatCompletion(ctx context.Context, channel string, messages []llm.Message, opts *llm.Options) (*llm.Message, error)
 }
 
+// StreamCaller 支持流式输出的模型调用接口（llm.Manager 实现）。
+type StreamCaller interface {
+	ChatStream(ctx context.Context, channel string, messages []llm.Message, opts *llm.Options, onDelta func(string)) (*llm.Message, error)
+}
+
 // ReActAgent 手写 ReAct（推理-行动循环）Agent：
 // 模型推理 → 发起工具调用 → 执行工具 → 把结果喂回模型 → 再推理，直至给出最终回答或达到步数上限。
 // Prompt 不固定：每次运行从 Prompt 库现取，可按场景切换变体。
@@ -68,17 +73,32 @@ func (a *ReActAgent) Name() string { return a.name }
 
 // Run 执行 ReAct 循环，返回最终文本回答。
 func (a *ReActAgent) Run(ctx context.Context, input string) (string, error) {
-	// 每次运行现取系统提示词：改 Prompt 文件即生效，无需重启
+	// 每次运行现取并渲染系统提示词（动态 Prompt：变量来自 context，可随时切换变体）
 	system := ""
 	if a.prompts != nil {
-		system = a.prompts.Get(a.promptName)
+		if rendered, err := a.prompts.Render(a.promptName, promptVarsFromContext(ctx)); err == nil {
+			system = rendered
+		} else {
+			system = a.prompts.Get(a.promptName) // 渲染失败回退原文
+		}
 	}
 
 	messages := []llm.Message{{Role: "user", Content: input}}
 	opts := &llm.Options{System: system, Tools: a.toolDefs, Temperature: a.temperature}
 
+	// 有事件 sink 且渠道支持流式时逐 token 输出；否则普通调用
+	streamer, canStream := a.llm.(StreamCaller)
+	streaming := canStream && runtime.SinkFromContext(ctx) != nil
+	onDelta := func(delta string) { runtime.EmitEvent(ctx, runtime.EventDelta, delta) }
+
 	for step := 1; step <= a.maxSteps; step++ {
-		resp, err := a.llm.ChatCompletion(ctx, a.channel, messages, opts)
+		var resp *llm.Message
+		var err error
+		if streaming {
+			resp, err = streamer.ChatStream(ctx, a.channel, messages, opts, onDelta)
+		} else {
+			resp, err = a.llm.ChatCompletion(ctx, a.channel, messages, opts)
+		}
 		if err != nil {
 			return "", fmt.Errorf("ReAct 第 %d 步模型调用失败: %w", step, err)
 		}
@@ -91,6 +111,7 @@ func (a *ReActAgent) Run(ctx context.Context, input string) (string, error) {
 		// 记录 assistant 的工具调用消息，随后逐个执行工具并回填结果
 		messages = append(messages, *resp)
 		for _, call := range resp.ToolCalls {
+			runtime.EmitToolEvent(ctx, a.name, call.Name) // 前端可见"正在调用工具"
 			a.logger.Info("ReAct 调用工具",
 				"agent", a.name, "step", step, "tool", call.Name, "args", call.Arguments, "trace_id", runtime.TraceIDFromContext(ctx))
 			result := a.tools.Execute(ctx, call.Name, call.Arguments)

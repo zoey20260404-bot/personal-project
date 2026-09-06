@@ -34,6 +34,7 @@ var ErrReplyTimeout = errors.New("等待 Agent 回复超时")
 type Message struct {
 	ID        string    // 关联 ID：响应与请求同 ID，用于请求-响应配对
 	TraceID   string    // 链路追踪 ID（一次外部请求贯穿所有 Agent 消息）
+	UserID    uint64    // 用户身份（JWT 透传，跨总线传播；工具执行的身份来源）
 	From      string    // 发送方节点名
 	To        string    // 接收方节点名，空表示广播
 	Type      string    // task / result / error / review
@@ -52,6 +53,7 @@ func newMsgID() string {
 type pendingEntry struct {
 	replyCh chan Message // 调用方等待回复的通道
 	target  string       // 目标节点名：只有来自该节点的消息才算回复（防止请求自身被误配对）
+	sink    EventSink    // 流式事件回调（跨总线透传：节点事件经总线转发给调用方）
 }
 
 // Bus 共享消息总线：缓冲 channel + 非阻塞发送（背压控制）。
@@ -89,7 +91,8 @@ func (b *Bus) Dropped() uint64 {
 
 // Call 同步请求-响应：向目标节点发送任务并等待同 ID 的回复。
 // 供 API 层/Supervisor 使用，把异步总线包装成同步调用。
-func (b *Bus) Call(ctx context.Context, from, to, msgType, content string, timeout time.Duration) (Message, error) {
+// sink 非空时，节点处理过程中产生的流式事件会实时转发给调用方。
+func (b *Bus) Call(ctx context.Context, from, to, msgType, content string, timeout time.Duration, sink EventSink) (Message, error) {
 	msg := Message{
 		ID:      newMsgID(),
 		From:    from,
@@ -97,13 +100,14 @@ func (b *Bus) Call(ctx context.Context, from, to, msgType, content string, timeo
 		Type:    msgType,
 		Content: content,
 	}
-	// 从上下文继承链路追踪 ID
+	// 从上下文继承链路追踪 ID 与用户身份（跨总线传播）
 	if traceID, ok := ctx.Value(traceIDKey{}).(string); ok {
 		msg.TraceID = traceID
 	}
+	msg.UserID = UserIDFromContext(ctx)
 
 	replyCh := make(chan Message, 1)
-	b.pending.Store(msg.ID, pendingEntry{replyCh: replyCh, target: to})
+	b.pending.Store(msg.ID, pendingEntry{replyCh: replyCh, target: to, sink: sink})
 	defer b.pending.Delete(msg.ID)
 
 	b.Publish(msg)
@@ -118,6 +122,15 @@ func (b *Bus) Call(ctx context.Context, from, to, msgType, content string, timeo
 		return Message{}, fmt.Errorf("%w: %s", ErrReplyTimeout, to)
 	case <-ctx.Done():
 		return Message{}, ctx.Err()
+	}
+}
+
+// EmitToMessage 将流式事件转发给指定消息的调用方（节点事件跨总线回传 SSE）。
+func (b *Bus) EmitToMessage(msgID string, ev StreamEvent) {
+	if entry, ok := b.pending.Load(msgID); ok {
+		if sink := entry.(pendingEntry).sink; sink != nil {
+			sink(ev)
+		}
 	}
 }
 

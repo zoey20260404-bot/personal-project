@@ -9,4 +9,6 @@ const (
 	NameAssistant         = "assistant"          // 通用问答（默认）
 	NameAssistantBeginner = "assistant_beginner" // 通用问答-0 基础模式
 	NameAssistantAdvanced = "assistant_advanced" // 通用问答-进阶模式
+	NameRouter            = "router"             // 意图路由（feat002）
+	NameAdvisor           = "advisor"            // 选岗参谋（feat002，支持 {{.Mode}}/{{.Profile}}/{{.Memories}} 变量）
 )

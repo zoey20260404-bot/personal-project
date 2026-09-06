@@ -94,8 +94,20 @@ SSE（text/event-stream）：ReAct 循环中工具调用过程发"思考中"事�
 
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
-| P1 | Router + advisor + 四个工具 + chat 接口 | 待 TODO-2 确认范围后启动 |
-| P2 | 记忆接入 + SSE 流式 | 待启动 |
+| P1 | Router + advisor + 四个工具 + chat 接口 | ✅ 已实现（2026-09-06） |
+| P2 | 记忆接入（短期 Redis 缓冲 + 长期 pgvector 召回） | ✅ 已实现（记忆写入待 embedding 密钥配置后生效） |
+| P2.5 | SSE 流式输出（status/tool/delta/done 事件，逐 token） | ✅ 已实现（2026-09-06，事件经总线 pending 条目跨节点透传） |
 | P3 | interviewer（纯 Prompt，最简单） | 待启动 |
 | P4 | exam_coach（依赖 TODO-1 题库数据源） | 阻塞 |
 | P5 | group_discussion（编排最复杂） | 待细化（TODO-3） |
+
+### P1 落地说明（技术清单对照）
+
+- **意图路由**：`agent.RouterAgent`（router 节点），LLM 输出 `{agent, confidence, reason}`，<0.7 反问澄清；模型不可用/输出非法 → 兜底 advisor
+- **工具白名单**：`agents.*.tools` 配置生效，ReActAgent 只挂载白名单工具；用户身份经 `tool.WithUserID(ctx)` 从 JWT 透传，模型无法伪造
+- **动态 Prompt**：`WithPromptVars(ctx, {Mode, Profile, Memories})`，ReAct 每次运行现渲染
+- **记忆**：短期 Redis `chat:buf:{session}`（20 条/2h）；长期 pgvector 三层作用域双写双召回
+- **ReAct 兜底**：max_steps 封顶 + Agent 失败返回友好兜底文案 + TraceID 日志
+- **温度/参数控制**：router temperature=0.1（分类求稳）、advisor temperature=0.5（表达适度），渠道级可配 max_tokens
+- **容错**：路由失败/节点未注册/ReAct 失败/LLM 无 key，全链路均有降级，接口不 500
+- **去中心化**：router/advisor 均为总线对等节点，各自独立 goroutine（运行时启动 4 节点）

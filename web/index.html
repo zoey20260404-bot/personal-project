@@ -267,21 +267,33 @@ input, textarea, select { font-family: inherit; }
   background: var(--bg-input); color: var(--text); font-size: 12px; outline: none;
   flex: 1; min-width: 110px;
 }
-.pos-table { width: 100%; border-collapse: collapse; }
-.pos-table th {
-  text-align: left; padding: 10px 12px; font-size: 12px; color: var(--text-dim);
-  border-bottom: 1px solid var(--border); font-weight: 500;
+/* 岗位卡片（替代表格，适配长短不一的真实数据） */
+.pos-card {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
 }
-.pos-table td { padding: 12px; font-size: 13px; border-bottom: 1px solid rgba(51,65,85,.5); vertical-align: top; }
-.pos-table tr:hover td { background: rgba(99,102,241,.05); }
-.pos-name { font-weight: 600; }
-.pos-dept { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.pos-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.pos-card-title { font-size: 14px; font-weight: 600; }
+.pos-card-dept { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.pos-card-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; align-items: center; }
+.pos-card-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+.pos-score { font-weight: 700; color: var(--accent); font-size: 14px; }
+.pos-score small { color: var(--text-dim); font-weight: 400; font-size: 11px; margin-left: 4px; }
+.pos-remark {
+  font-size: 12px; color: var(--warning); margin-top: 8px;
+  max-height: 34px; overflow: hidden; cursor: pointer; line-height: 1.5;
+}
+.pos-remark.expanded { max-height: none; }
+.btn-fav {
+  padding: 5px 14px; border-radius: 8px; border: none; font-size: 12px; white-space: nowrap;
+  background: linear-gradient(90deg, var(--primary), #4f46e5); color: #fff;
+}
+.btn-fav.favored { background: rgba(248,113,113,.15); color: var(--danger); }
 .pos-tag {
   display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
   background: rgba(99,102,241,.12); color: var(--primary-hover); margin: 1px 2px;
 }
 .pos-tag.warn { background: rgba(251,191,36,.12); color: var(--warning); }
-.pos-score { font-weight: 600; color: var(--accent); }
 .pos-pager { display: flex; gap: 8px; justify-content: center; margin-top: 18px; align-items: center; }
 .pos-pager button {
   padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
@@ -416,6 +428,7 @@ input, textarea, select { font-family: inherit; }
                 <option value="省考">省考</option>
               </select>
               <input id="posProvince" placeholder="省份（默认取档案）" onkeydown="if(event.key==='Enter')loadPositions(1)">
+              <input id="posCity" placeholder="城市，如 深圳" onkeydown="if(event.key==='Enter')loadPositions(1)">
               <input id="posKeyword" placeholder="关键词（岗位名/单位）" onkeydown="if(event.key==='Enter')loadPositions(1)">
               <select id="posEducation" onchange="loadPositions(1)">
                 <option value="">学历（默认取档案）</option>
@@ -423,6 +436,21 @@ input, textarea, select { font-family: inherit; }
                 <option value="本科">本科</option>
                 <option value="硕士">硕士</option>
                 <option value="博士">博士</option>
+              </select>
+              <select id="posPolitical" onchange="loadPositions(1)">
+                <option value="">政治面貌（默认取档案）</option>
+                <option value="中共党员">中共党员</option>
+                <option value="共青团员">共青团员</option>
+                <option value="群众">群众</option>
+              </select>
+              <input id="posMajor" placeholder="专业大类，如 计算机类" onkeydown="if(event.key==='Enter')loadPositions(1)">
+              <select id="posWorkYears" onchange="loadPositions(1)">
+                <option value="">基层年限（不限）</option>
+                <option value="0">无经验</option>
+                <option value="1">1 年以上</option>
+                <option value="2">2 年以上</option>
+                <option value="3">3 年以上</option>
+                <option value="5">5 年以上</option>
               </select>
               <button class="btn-primary" style="width:auto;padding:8px 18px" onclick="loadPositions(1)">筛选</button>
               <button class="btn-ghost" onclick="resetPosFilter()">↺ 重置</button>
@@ -459,7 +487,7 @@ input, textarea, select { font-family: inherit; }
       <div class="section-title"><span class="dot"></span>多轮追问<span style="font-size:12px;color:var(--text-dim);font-weight:400">（基于解析报告继续提问）</span></div>
       <div class="chat-box">
         <div class="chat-messages" id="chatMessages">
-          <div class="chat-msg assistant">你好！我是你的选岗参谋。完成条件解析后，可以在这里继续追问岗位对比、待遇、专业匹配等问题。</div>
+          <div class="chat-msg assistant">你好！我是你的考公助手。可以问我选岗建议、补充个人信息（比如"我入党了"），也可以练笔试、模拟面试。</div>
         </div>
         <div class="chat-input-row">
           <input id="chatInput" placeholder="输入你的问题..." onkeydown="if(event.key==='Enter')sendChat()">
@@ -773,12 +801,20 @@ async function loadPositions(page) {
   }
   const examType = document.getElementById('posExamType').value;
   const province = document.getElementById('posProvince').value.trim();
+  const city = document.getElementById('posCity').value.trim();
   const keyword = document.getElementById('posKeyword').value.trim();
   const education = document.getElementById('posEducation').value;
+  const political = document.getElementById('posPolitical').value;
+  const major = document.getElementById('posMajor').value.trim();
+  const workYears = document.getElementById('posWorkYears').value;
   if (examType) params.set('exam_type', examType);
   if (province) params.set('province', province);
+  if (city) params.set('city', city);
   if (keyword) params.set('keyword', keyword);
   if (education) params.set('education', education);
+  if (political) params.set('political', political);
+  if (major) params.set('major_category', major);
+  if (workYears !== '') params.set('work_years', workYears);
   params.set('page', posPage);
   params.set('page_size', POS_PAGE_SIZE);
   try {
@@ -809,33 +845,49 @@ function applyProfileFilters(profile) {
 function resetPosFilter() {
   document.getElementById('posExamType').value = '';
   document.getElementById('posProvince').value = '';
+  document.getElementById('posCity').value = '';
   document.getElementById('posKeyword').value = '';
   document.getElementById('posEducation').value = '';
+  document.getElementById('posPolitical').value = '';
+  document.getElementById('posMajor').value = '';
+  document.getElementById('posWorkYears').value = '';
   loadPositions(1);
 }
 function renderPositions(list) {
   lastPosList = list;
   const el = document.getElementById('posList');
   if (!list.length) { el.innerHTML = '<div class="empty-tip">没有符合条件的岗位</div>'; return; }
-  let html = '<table class="pos-table"><thead><tr><th>岗位</th><th>考区</th><th>条件要求</th><th>进面分</th><th>报录比</th><th></th></tr></thead><tbody>';
+  let html = '';
   list.forEach(p => {
-    const conds = [p.EducationReq, p.MajorReqCategory, p.PoliticalReq,
+    const conds = [p.EducationReq, p.MajorReqCategory || p.MajorReqExact, p.PoliticalReq,
       p.FreshGraduateReq === true ? '限应届' : '', p.WorkExperienceYearsReq > 0 ? '基层' + p.WorkExperienceYearsReq + '年' : '']
       .filter(Boolean).map(t => '<span class="pos-tag">' + esc(t) + '</span>').join('');
-    const remark = p.Remarks ? '<span class="pos-tag warn">⚠ ' + esc(p.Remarks) + '</span>' : '';
-    const score = p.Score2025 ? '<span class="pos-score">' + p.Score2025 + '</span><div style="font-size:11px;color:var(--text-dim)">' + (p.Score2024 ? '24年:' + p.Score2024 : '') + '</div>' : '-';
     const posId = 'pos_' + p.ID;
     const favored = favSet.has(posId);
-    const btnClass = favored ? 'btn-danger' : 'btn-primary';
-    const btnText = favored ? '★ 已收藏' : '收藏';
-    html += '<tr><td><div class="pos-name">' + esc(p.PositionName) + '</div><div class="pos-dept">' + esc(p.Department) + '</div>' + remark + '</td>' +
-      '<td>' + esc(p.ExamType) + ' · ' + esc(p.Province) + (p.City ? ' · ' + esc(p.City) : '') + '<div style="font-size:11px;color:var(--text-dim)">' + p.Year + '</div></td>' +
-      '<td>' + conds + '</td>' +
-      '<td>' + score + '</td>' +
-      '<td>' + esc(p.ApplicantRatio2025 || '-') + '</td>' +
-      '<td><button class="' + btnClass + '" style="width:auto;padding:6px 14px;font-size:12px" onclick="toggleFavorite(' + p.ID + ', \'' + esc(p.PositionName) + '\')">' + btnText + '</button></td></tr>';
+    const remark = p.Remarks
+      ? '<div class="pos-remark" onclick="this.classList.toggle(\'expanded\')">⚠ ' + esc(p.Remarks) + '</div>'
+      : '';
+    const score = p.ScoreLatest > 0
+      ? '<span class="pos-score">' + p.ScoreLatest + ' 分<small>' + (p.ScoreYear || '') + ' 进面</small></span>'
+      : '<span style="font-size:12px;color:var(--text-dim)">分数待收录</span>';
+    html += '<div class="pos-card">' +
+      '<div class="pos-card-head"><div>' +
+        '<div class="pos-card-title">' + esc(p.PositionName) + '</div>' +
+        '<div class="pos-card-dept">' + esc(p.Department) + '</div>' +
+      '</div>' +
+      '<button class="btn-fav' + (favored ? ' favored' : '') + '" onclick="toggleFavorite(' + p.ID + ', \'' + esc(p.PositionName) + '\')">' +
+        (favored ? '★ 已收藏' : '☆ 收藏') + '</button></div>' +
+      '<div class="pos-card-meta">' +
+        '<span class="pos-tag">' + esc(p.ExamType) + '</span>' +
+        '<span class="pos-tag">📍 ' + esc(p.City || p.Province) + '</span>' +
+        conds +
+      '</div>' +
+      remark +
+      '<div class="pos-card-foot">' + score +
+        '<span style="font-size:11px;color:var(--text-dim)">' + p.Year + ' · ' + esc(p.PositionCode || '') + '</span></div>' +
+      '</div>';
   });
-  el.innerHTML = html + '</tbody></table>';
+  el.innerHTML = html;
 }
 function renderPosPager() {
   const pages = Math.max(1, Math.ceil(posTotal / POS_PAGE_SIZE));
@@ -858,30 +910,97 @@ async function toggleFavorite(posId, name) {
   } catch (e) { toast(e.message, 'error'); }
 }
 
-// ---------- 对话 ----------
+// ---------- 对话（SSE 流式） ----------
+let chatSessionID = localStorage.getItem('chatSessionID') || '';
+const AGENT_NAMES = { advisor: '🎯 选岗参谋', router: '🧭 意图路由', exam_coach: '✏️ 笔试中枢', interviewer: '🎤 面试考官', group_discussion: '👥 无领导小组' };
 async function sendChat() {
   const input = document.getElementById('chatInput');
   const q = input.value.trim();
   if (!q) return;
   input.value = '';
   appendMsg('user', q);
+  const bubble = appendMsg('assistant', '');
+  const statusLine = document.createElement('div');
+  statusLine.style.cssText = 'font-size:11px;color:var(--text-dim);margin-bottom:4px';
+  statusLine.textContent = '思考中…';
+  bubble.appendChild(statusLine);
+  const body = document.createElement('div');
+  bubble.appendChild(body);
+
   try {
-    const data = await api('/api/v1/chat', {
+    // fetch 流式消费 SSE（逐 token 渲染）
+    const resp = await fetch('/api/v1/chat', {
       method: 'POST',
-      body: JSON.stringify({ session_id: lastParseResult ? lastParseResult.session_id : '', question: q })
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ session_id: chatSessionID, question: q })
     });
-    appendMsg('assistant', data.data && data.data.answer ? data.data.answer : '（暂无回复）');
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || ('请求失败 ' + resp.status));
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let agentName = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      // 按 SSE 事件边界切分
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const raw = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        const line = raw.replace(/^data: /, '').trim();
+        if (!line) continue;
+        const ev = JSON.parse(line);
+        if (ev.type === 'status') {
+          statusLine.textContent = ev.content;
+        } else if (ev.type === 'tool') {
+          statusLine.textContent = '正在调用工具 ' + (ev.tool || '') + '…';
+        } else if (ev.type === 'delta') {
+          if (statusLine.textContent === '思考中…') statusLine.textContent = '';
+          body.textContent += ev.content;
+          document.getElementById('chatMessages').scrollTop = 1e9;
+        } else if (ev.type === 'done') {
+          const d = JSON.parse(ev.content);
+          chatSessionID = d.session_id || chatSessionID;
+          localStorage.setItem('chatSessionID', chatSessionID);
+          agentName = d.agent || '';
+          // delta 未流出内容时（如兜底回复），用最终答案填充
+          if (!body.textContent) body.textContent = d.answer || '（暂无回复）';
+        } else if (ev.type === 'error') {
+          body.textContent = '🚧 ' + ev.content;
+        }
+      }
+    }
+    if (agentName && AGENT_NAMES[agentName]) {
+      statusLine.textContent = AGENT_NAMES[agentName];
+      statusLine.style.color = 'var(--accent)';
+      statusLine.style.fontWeight = '600';
+    } else if (!agentName) {
+      statusLine.remove();
+    }
   } catch (e) {
-    appendMsg('assistant', '🚧 ' + e.message + '。多轮追问能力正在建设中，当前可先使用条件解析与收藏功能。');
+    statusLine.remove();
+    body.textContent = '🚧 ' + e.message;
   }
 }
-function appendMsg(role, text) {
+function appendMsg(role, text, agentName) {
   const box = document.getElementById('chatMessages');
   const div = document.createElement('div');
   div.className = 'chat-msg ' + role;
-  div.textContent = text;
+  if (agentName && AGENT_NAMES[agentName]) {
+    const tag = document.createElement('div');
+    tag.style.cssText = 'font-size:11px;color:var(--accent);margin-bottom:4px;font-weight:600';
+    tag.textContent = AGENT_NAMES[agentName];
+    div.appendChild(tag);
+  }
+  const body = document.createElement('div');
+  body.textContent = text;
+  div.appendChild(body);
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
+  return div;
 }
 
 // ---------- 启动 ----------

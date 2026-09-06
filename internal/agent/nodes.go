@@ -36,11 +36,26 @@ func BuildRuntime(agentCfgs map[string]config.AgentConfig, runtimeCfg config.Run
 		case AgentTypeReact:
 			react := NewReActAgent(name, ac.Model, prompts, ac.Prompt, ac.MaxSteps, ac.Temperature, manager, tools, ac.Tools, logger)
 			rt.Register(NewReActNode(name, react, runtimeCfg.NodeInbox))
+		case AgentTypeRouter:
+			router := NewRouterAgent(manager, ac.Model, prompts, "advisor") // 兜底目标：选岗参谋
+			rt.Register(NewRouterNode(name, router, runtimeCfg.NodeInbox))
 		default:
 			return nil, fmt.Errorf("Agent %q 类型 %q 未支持", name, ac.Type)
 		}
 	}
 	return rt, nil
+}
+
+// NewRouterNode 创建意图路由节点：任务为用户问题，回复为路由结果 JSON。
+func NewRouterNode(name string, router *RouterAgent, inboxSize int) *runtime.Node {
+	return runtime.NewNode(name, inboxSize, func(ctx context.Context, msg runtime.Message) (runtime.Message, error) {
+		result := router.Route(ctx, msg.Content)
+		data, err := json.Marshal(result)
+		if err != nil {
+			return runtime.Message{}, fmt.Errorf("序列化路由结果失败: %w", err)
+		}
+		return runtime.Message{Type: runtime.MsgTypeResult, Content: string(data)}, nil
+	})
 }
 
 // NewParserNode 创建条件解析节点：接收多源解析任务（文本+图片），融合返回结构化 ParseResult。

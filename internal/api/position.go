@@ -30,6 +30,12 @@ func (h *Handler) ListPositions(c *gin.Context) {
 		fresh := freshStr == "true"
 		filter.IsFresh = &fresh
 	}
+	// 基层年限过滤：岗位要求 ≤ 用户年限
+	if wyStr := c.Query("work_years"); wyStr != "" {
+		if wy, err := strconv.Atoi(wyStr); err == nil {
+			filter.WorkYears = &wy
+		}
+	}
 
 	positions, total, err := h.svc.Services.Position.Query(filter)
 	if err != nil {

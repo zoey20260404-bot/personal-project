@@ -14,7 +14,7 @@ type Position struct {
 	PositionCode           string `gorm:"column:position_code;size:100"`              // 职位代码
 	EducationReq           string `gorm:"column:education_req;size:50"`               // 学历要求：大专/本科/硕士/博士/不限
 	MajorReqExact          string `gorm:"column:major_req_exact;type:text"`           // 精确专业要求，逗号分隔
-	MajorReqCategory       string `gorm:"column:major_req_category;size:100"`         // 专业大类，如"计算机类"
+	MajorReqCategory       string `gorm:"column:major_req_category;type:text"`        // 专业大类，如"计算机类"
 	PoliticalReq           string `gorm:"column:political_req;size:50"`               // 政治面貌要求：群众/共青团员/中共党员/不限
 	FreshGraduateReq       *bool  `gorm:"column:fresh_graduate_req"`                  // 是否限应届（nil=不限）
 	WorkExperienceYearsReq int    `gorm:"column:work_experience_years_req;default:0"` // 基层工作年限要求
@@ -23,6 +23,8 @@ type Position struct {
 	Remarks                string `gorm:"column:remarks;type:text"`                   // 岗位备注（暗坑提示来源）
 	Score2025              int    `gorm:"column:score_2025"`                          // 2025 进面最低分
 	Score2024              int    `gorm:"column:score_2024"`                          // 2024 进面最低分
+	ScoreLatest            int    `gorm:"column:score_latest"`                        // 最近一年进面最低分（从面试名单聚合）
+	ScoreYear              int    `gorm:"column:score_year"`                          // ScoreLatest 对应年度
 	ApplicantRatio2025     string `gorm:"column:applicant_ratio_2025;size:20"`        // 2025 报录比，如 "1:85"
 }
 
@@ -40,6 +42,7 @@ type PositionFilter struct {
 	MajorCategory string   // 用户专业大类（岗位大类匹配或不限）
 	Political     string   // 用户政治面貌（满足岗位要求）
 	IsFresh       *bool    // 用户应届身份
+	WorkYears     *int     // 用户基层年限（岗位要求 ≤ 用户年限）
 	Provinces     []string // 目标省份多值（档案条件，IN 查询）
 	Page          int      // 页码（1 起）
 	PageSize      int      // 每页条数
@@ -74,7 +77,12 @@ func (s *MySQLStore) QueryPositions(filter PositionFilter) ([]Position, int64, e
 		query = query.Where("province IN ? OR province = '国家'", filter.Provinces)
 	}
 	if filter.City != "" {
-		query = query.Where("city = ?", filter.City)
+		// 城市按包含匹配（数据形如"广东省深圳市"，用户输入"深圳"即可命中）
+		query = query.Where("city LIKE ?", "%"+filter.City+"%")
+	}
+	// 基层年限：岗位要求 ≤ 用户年限（0=不限，所有人可报）
+	if filter.WorkYears != nil {
+		query = query.Where("work_experience_years_req <= ?", *filter.WorkYears)
 	}
 	if filter.Keyword != "" {
 		like := "%" + filter.Keyword + "%"
@@ -136,4 +144,30 @@ func (s *MySQLStore) SeedPositions(positions []Position) error {
 		return nil // 已有数据，跳过
 	}
 	return s.db.Create(&positions).Error
+}
+
+// CreatePositions 批量写入岗位（职位表导入脚本用，每批 500 条）。
+func (s *MySQLStore) CreatePositions(positions []Position) error {
+	return s.db.CreateInBatches(positions, 500).Error
+}
+
+// UpdatePositionScore 按职位代码更新最近一年进面最低分，返回影响行数。
+func (s *MySQLStore) UpdatePositionScore(code string, score int, year int) (int64, error) {
+	result := s.db.Model(&Position{}).Where("position_code = ?", code).
+		Updates(map[string]interface{}{"score_latest": score, "score_year": year})
+	return result.RowsAffected, result.Error
+}
+
+// ListPositionsForBackfill 读取需要专业大类回填的岗位（有原文但无大类）。
+func (s *MySQLStore) ListPositionsForBackfill() ([]Position, error) {
+	var positions []Position
+	err := s.db.Select("id", "major_req_exact").
+		Where("major_req_exact <> '' AND major_req_exact <> '不限' AND (major_req_category = '' OR major_req_category IS NULL)").
+		Find(&positions).Error
+	return positions, err
+}
+
+// UpdateMajorCategory 回填岗位的专业大类。
+func (s *MySQLStore) UpdateMajorCategory(id uint64, category string) error {
+	return s.db.Model(&Position{}).Where("id = ?", id).Update("major_req_category", category).Error
 }

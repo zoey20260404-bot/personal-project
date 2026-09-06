@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"ai-start/internal/agent"
@@ -84,6 +85,60 @@ func (s *ParseService) Confirm(userID uint64, sessionID string, partial *types.U
 		SessionID:  sessionID,
 		ParsedFrom: "confirmed",
 	}, nil
+}
+
+// UpdateFromText 档案增量更新（chat 补充条件场景，feat002）：
+// 用户口述变更 → Parser 解析 → 与历史档案合并（确定的覆盖、未提及的保留）→ 落档案。
+// 返回更新后的档案与变更字段名列表。
+func (s *ParseService) UpdateFromText(ctx context.Context, userID uint64, text string) (*types.UserProfile, []string, error) {
+	result, err := s.supervisor.ParseInput(ctx, text, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	newProfile := result.Profile
+	if newProfile == nil {
+		newProfile = result.ProfilePartial
+	}
+	if newProfile == nil {
+		return nil, nil, nil
+	}
+
+	existing := s.loadProfile(userID)
+	if existing == nil {
+		// 无历史档案：直接建档
+		s.upsertProfile(userID, newProfile)
+		return newProfile, []string{"(首次建档)"}, nil
+	}
+
+	merged := mergeWithExisting(newProfile, result.UncertainFields, existing)
+	changed := diffProfiles(existing, merged)
+	s.upsertProfile(userID, merged)
+	return merged, changed, nil
+}
+
+// diffProfiles 对比两份档案，返回发生变化的字段名列表。
+func diffProfiles(old, new *types.UserProfile) []string {
+	var changed []string
+	if old.Education != new.Education {
+		changed = append(changed, "学历: "+old.Education+" → "+new.Education)
+	}
+	if old.Major != new.Major {
+		changed = append(changed, "专业: "+old.Major+" → "+new.Major)
+	}
+	if old.PoliticalStatus != new.PoliticalStatus {
+		changed = append(changed, "政治面貌: "+old.PoliticalStatus+" → "+new.PoliticalStatus)
+	}
+	if (old.IsFreshGraduate == nil) != (new.IsFreshGraduate == nil) ||
+		(old.IsFreshGraduate != nil && new.IsFreshGraduate != nil && *old.IsFreshGraduate != *new.IsFreshGraduate) {
+		changed = append(changed, "应届身份已更新")
+	}
+	if fmt.Sprintf("%v", old.TargetProvinces) != fmt.Sprintf("%v", new.TargetProvinces) {
+		changed = append(changed, "目标省份已更新")
+	}
+	if old.WorkExperienceYears != new.WorkExperienceYears {
+		changed = append(changed, fmt.Sprintf("基层年限: %d → %d", old.WorkExperienceYears, new.WorkExperienceYears))
+	}
+	return changed
 }
 
 // GetLatestProfile 获取用户权威档案（解析页直接展示）。

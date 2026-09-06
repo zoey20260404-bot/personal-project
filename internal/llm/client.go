@@ -116,10 +116,79 @@ func (m *Manager) ChatCompletion(ctx context.Context, channel string, messages [
 	if !ok {
 		return nil, fmt.Errorf("模型渠道 %q 未配置", channel)
 	}
-	channelCfg := m.configs[channel]
 
+	resp, err := client.CreateChatCompletion(ctx, m.buildRequest(channel, messages, opts))
+	if err != nil {
+		return nil, fmt.Errorf("渠道 %q 调用失败: %w", channel, err)
+	}
+	return fromOpenAIMessage(resp.Choices[0].Message), nil
+}
+
+// ChatStream 流式对话：逐 token 回调 onDelta（文本增量），
+// 返回聚合后的完整消息（含工具调用，供 ReAct 循环判断）。
+// 流式中工具调用增量按 index 累积，不影响文本回调。
+func (m *Manager) ChatStream(ctx context.Context, channel string, messages []Message, opts *Options, onDelta func(string)) (*Message, error) {
+	client, ok := m.clients[channel]
+	if !ok {
+		return nil, fmt.Errorf("模型渠道 %q 未配置", channel)
+	}
+	req := m.buildRequest(channel, messages, opts)
+
+	stream, err := client.CreateChatCompletionStream(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("渠道 %q 流式调用失败: %w", channel, err)
+	}
+	defer stream.Close()
+
+	final := &Message{Role: "assistant"}
+	toolAcc := make(map[int]*ToolCall) // 工具调用增量按 index 累积
+	for {
+		chunk, err := stream.Recv()
+		if err != nil {
+			break // io.EOF 为正常结束
+		}
+		if len(chunk.Choices) == 0 {
+			continue
+		}
+		delta := chunk.Choices[0].Delta
+		if delta.Content != "" {
+			final.Content += delta.Content
+			if onDelta != nil {
+				onDelta(delta.Content)
+			}
+		}
+		for _, tc := range delta.ToolCalls {
+			if tc.Index == nil {
+				continue
+			}
+			idx := int(*tc.Index)
+			acc, ok := toolAcc[idx]
+			if !ok {
+				acc = &ToolCall{}
+				toolAcc[idx] = acc
+			}
+			if tc.ID != "" {
+				acc.ID = tc.ID
+			}
+			if tc.Function.Name != "" {
+				acc.Name = tc.Function.Name
+			}
+			acc.Arguments += tc.Function.Arguments
+		}
+	}
+	// 聚合工具调用（按 index 排序）
+	for i := 0; i < len(toolAcc); i++ {
+		if tc, ok := toolAcc[i]; ok {
+			final.ToolCalls = append(final.ToolCalls, *tc)
+		}
+	}
+	return final, nil
+}
+
+// buildRequest 构建 ChatCompletion 请求（Chat/ChatCompletion/ChatStream 共用）。
+func (m *Manager) buildRequest(channel string, messages []Message, opts *Options) openai.ChatCompletionRequest {
+	channelCfg := m.configs[channel]
 	req := openai.ChatCompletionRequest{Model: channelCfg.Model}
-	// 单次调用参数覆盖（温度/模型）
 	if opts != nil {
 		if opts.Model != "" {
 			req.Model = opts.Model
@@ -140,36 +209,29 @@ func (m *Manager) ChatCompletion(ctx context.Context, channel string, messages [
 	if channelCfg.MaxTokens > 0 {
 		req.MaxTokens = channelCfg.MaxTokens
 	}
-
 	for _, msg := range messages {
 		req.Messages = append(req.Messages, toOpenAIMessage(msg))
 	}
-	// 挂载工具定义
 	if opts != nil {
 		for _, t := range opts.Tools {
 			var params map[string]interface{}
-			if err := json.Unmarshal([]byte(t.ParamsJSON), &params); err != nil {
-				return nil, fmt.Errorf("工具 %q 参数 Schema 解析失败: %w", t.Name, err)
+			if err := json.Unmarshal([]byte(t.ParamsJSON), &params); err == nil {
+				req.Tools = append(req.Tools, openai.Tool{
+					Type: openai.ToolTypeFunction,
+					Function: &openai.FunctionDefinition{
+						Name:        t.Name,
+						Description: t.Description,
+						Parameters:  params,
+					},
+				})
 			}
-			req.Tools = append(req.Tools, openai.Tool{
-				Type: openai.ToolTypeFunction,
-				Function: &openai.FunctionDefinition{
-					Name:        t.Name,
-					Description: t.Description,
-					Parameters:  params,
-				},
-			})
 		}
 	}
-
-	resp, err := client.CreateChatCompletion(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("渠道 %q 调用失败: %w", channel, err)
-	}
-	return fromOpenAIMessage(resp.Choices[0].Message), nil
+	return req
 }
 
 // ChatWithImage 图文对话（vision 渠道），imageBase64 为图片的 Base64 编码内容。
+// 用于职位表截图、毕业证等图片的识别与结构化提取。
 func (m *Manager) ChatWithImage(ctx context.Context, system, user, imageBase64 string) (string, error) {
 	client, ok := m.clients[ChannelVision]
 	if !ok {

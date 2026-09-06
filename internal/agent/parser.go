@@ -269,6 +269,16 @@ func Confirm(partial *UserProfile, confirmed map[string]string) *UserProfile {
 			merged.MajorCategory = value
 		case types.FieldPoliticalStatus:
 			merged.PoliticalStatus = value
+		case types.FieldIsFreshGraduate:
+			// 应届身份（三态）："true"/"false" 字符串转指针
+			if v := strings.TrimSpace(strings.ToLower(value)); v == "true" {
+				merged.IsFreshGraduate = boolPtr(true)
+			} else if v == "false" {
+				merged.IsFreshGraduate = boolPtr(false)
+			}
+		case types.FieldTargetProvinces:
+			// 省份：支持逗号/顿号分隔的多值
+			merged.TargetProvinces = splitAndTrim(value)
 		case types.FieldGender:
 			merged.Gender = value
 		}
@@ -278,4 +288,17 @@ func Confirm(partial *UserProfile, confirmed map[string]string) *UserProfile {
 		merged.MajorCategory = majorCategoryOf(merged.Major)
 	}
 	return &merged
+}
+
+// splitAndTrim 按逗号/顿号/空格拆分字符串并去除空白项。
+func splitAndTrim(s string) []string {
+	var out []string
+	for _, part := range strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == '，' || r == '、' || r == ' '
+	}) {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

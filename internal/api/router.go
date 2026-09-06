@@ -30,6 +30,7 @@ func NewRouter(h *Handler) *gin.Engine {
 		v1.POST("/parse", h.Parse)                // 条件解析（文字/图片）
 		v1.POST("/parse/confirm", h.ParseConfirm) // 低置信度字段确认修正
 		v1.GET("/profile", h.GetProfile)          // 用户条件档案（最近一次解析结果）
+		v1.GET("/positions", h.ListPositions)     // 岗位查询（分页筛选，页面展示）
 		v1.POST("/favorites", h.Favorite)         // 收藏/取消收藏岗位
 		v1.GET("/favorites", h.ListFavorites)     // 收藏列表
 		v1.POST("/chat", h.Chat)                  // 多轮追问（P1 占位）

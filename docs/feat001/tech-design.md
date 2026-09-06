@@ -86,6 +86,7 @@ Supervisor（调度中枢，不持有 Agent 实例，只发消息）
 | `/api/v1/parse` | POST | 条件解析（文本 + 毕业证图片多源融合），低置信度返回 need_confirm；快照落 MySQL | 已实现（JWT） |
 | `/api/v1/parse/confirm` | POST | 确认修正低置信度字段，合并返回完整 profile | 已实现（JWT） |
 | `/api/v1/profile` | GET | 用户条件档案（最近一次解析快照，解析页直接展示） | 已实现（JWT） |
+| `/api/v1/positions` | GET | 岗位分页查询（考试类型/省份/关键词/学历/专业大类/政治面貌/应届过滤） | 已实现（JWT） |
 | `/api/v1/favorites` | POST/GET | 收藏/取消收藏岗位、收藏列表（按登录用户隔离） | 已实现（JWT） |
 | `/api/v1/chat` | POST | 多轮追问（将基于 pgvector 记忆召回 + RAG） | 占位（501） |
 | `/api/v1/advise` | POST | 选岗推荐（冲稳保） | 待实现 |

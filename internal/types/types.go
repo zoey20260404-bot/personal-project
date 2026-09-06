@@ -2,6 +2,12 @@
 // 独立成包以避免 agent 与 store 之间的循环依赖。
 package types
 
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+)
+
 // UserProfile 标准化用户条件结构（PRD 3.2.1 响应中的 profile 字段）。
 type UserProfile struct {
 	Education           string   `json:"education"`             // 学历：大专/本科/硕士/博士
@@ -39,6 +45,41 @@ const (
 	FieldGender          = "gender"
 	FieldAge             = "age"
 )
+
+// UnmarshalJSON 容错解析：LLM 输出类型不稳定（数字字段可能是小数或字符串，
+// 如"工作两年多"→2.5），统一在此兜底转换。见 docs/feat001/test-issues.md 问题 4。
+func (p *UserProfile) UnmarshalJSON(data []byte) error {
+	type Alias UserProfile // 避免递归
+	aux := struct {
+		*Alias
+		WorkExperienceYears json.RawMessage `json:"work_experience_years"`
+		Age                 json.RawMessage `json:"age"`
+	}{Alias: (*Alias)(p)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	p.WorkExperienceYears = parseIntTolerant(aux.WorkExperienceYears)
+	p.Age = parseIntTolerant(aux.Age)
+	return nil
+}
+
+// parseIntTolerant 容错解析整数：兼容 int / float（向下取整）/ 数字字符串 / null。
+func parseIntTolerant(raw json.RawMessage) int {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0
+	}
+	var f float64
+	if err := json.Unmarshal(raw, &f); err == nil {
+		return int(f) // 小数向下取整（2.5 年 → 2 年，偏保守安全）
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		if v, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err == nil {
+			return int(v)
+		}
+	}
+	return 0
+}
 
 // UncertainField OCR/解析低置信度字段（PRD 2.1 OCR方案C）。
 type UncertainField struct {

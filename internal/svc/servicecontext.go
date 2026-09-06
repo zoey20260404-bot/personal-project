@@ -75,6 +75,10 @@ func NewServiceContext(cfg *config.Config) (*ServiceContext, error) {
 		logger.Warn("MySQL 不可用，用户数据将不持久化", "err", err)
 	} else {
 		svc.MySQL = ms
+		// 岗位示例数据：表为空时写入（开发演示；真实数据走职位表导入）
+		if err := ms.SeedPositions(store.SamplePositions()); err != nil {
+			logger.Warn("岗位示例数据写入失败", "err", err)
+		}
 	}
 
 	// pgvector 向量库：Agent 长期记忆 + RAG 知识库；不可用时记忆功能停用

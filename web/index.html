@@ -130,22 +130,44 @@ input, textarea, select { font-family: inherit; }
 }
 .nav-tab:hover:not(.active) { color: var(--text); }
 
-.main { flex: 1; padding: 0 28px 28px; }
+.main { flex: 1; padding: 0 28px 28px; min-height: 0; }
 .panel {
   display: none;
   background: rgba(30, 41, 59, 0.7);
   backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-radius: 0 var(--radius) var(--radius) var(--radius);
-  padding: 28px;
-  min-height: 60vh;
+  padding: 24px 28px;
 }
 .panel.active { display: block; animation: fadeIn .25s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* 解析面板 */
-.parse-grid { display: grid; grid-template-columns: 420px 1fr; gap: 28px; }
+/* 解析面板：左右两栏，内容自然紧凑排布 */
+.parse-grid { display: grid; grid-template-columns: 380px 1fr; gap: 28px; align-items: start; }
 @media (max-width: 960px) { .parse-grid { grid-template-columns: 1fr; } }
+/* 左列：自然排列，适度间距 */
+.parse-input { display: flex; flex-direction: column; gap: 14px; }
+.parse-input .section-title { margin-bottom: 0; }
+.parse-input textarea { height: 150px; }
+/* 填写小贴士 */
+.parse-tips {
+  padding: 14px 16px;
+  background: rgba(99,102,241,.06); border: 1px solid rgba(99,102,241,.25);
+  border-radius: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.9;
+}
+.parse-tips b { color: var(--text); font-size: 13px; }
+.parse-tips code {
+  background: var(--bg-input); padding: 1px 6px; border-radius: 4px;
+  color: var(--accent); font-size: 12px;
+}
+/* 右列：上为解析结果，下为匹配岗位（列表区自身滚动） */
+.parse-right { display: flex; flex-direction: column; gap: 20px; }
+.match-section { display: flex; flex-direction: column; }
+.match-sub { font-size: 12px; color: var(--text-dim); font-weight: 400; }
+.pos-list-scroll {
+  max-height: 380px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 10px;
+}
 .section-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
 .section-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .parse-input textarea {
@@ -155,13 +177,6 @@ input, textarea, select { font-family: inherit; }
   color: var(--text); font-size: 14px; line-height: 1.6; outline: none;
 }
 .parse-input textarea:focus { border-color: var(--primary); }
-.mode-row { display: flex; gap: 10px; margin: 14px 0; }
-.mode-chip {
-  flex: 1; padding: 10px; text-align: center; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--bg-input);
-  color: var(--text-dim); font-size: 13px; transition: all .2s;
-}
-.mode-chip.active { border-color: var(--primary); color: var(--text); background: rgba(99,102,241,.15); }
 .upload-box {
   border: 2px dashed var(--border); border-radius: 10px;
   padding: 18px; text-align: center; color: var(--text-dim);
@@ -245,6 +260,37 @@ input, textarea, select { font-family: inherit; }
 .btn-danger:hover { background: rgba(248,113,113,.25); }
 .empty-tip { text-align: center; color: var(--text-dim); padding: 48px 0; font-size: 14px; }
 
+/* 岗位查询面板（紧凑筛选条，位于右列匹配区内） */
+.pos-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.pos-filter input, .pos-filter select {
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-input); color: var(--text); font-size: 12px; outline: none;
+  flex: 1; min-width: 110px;
+}
+.pos-table { width: 100%; border-collapse: collapse; }
+.pos-table th {
+  text-align: left; padding: 10px 12px; font-size: 12px; color: var(--text-dim);
+  border-bottom: 1px solid var(--border); font-weight: 500;
+}
+.pos-table td { padding: 12px; font-size: 13px; border-bottom: 1px solid rgba(51,65,85,.5); vertical-align: top; }
+.pos-table tr:hover td { background: rgba(99,102,241,.05); }
+.pos-name { font-weight: 600; }
+.pos-dept { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.pos-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
+  background: rgba(99,102,241,.12); color: var(--primary-hover); margin: 1px 2px;
+}
+.pos-tag.warn { background: rgba(251,191,36,.12); color: var(--warning); }
+.pos-score { font-weight: 600; color: var(--accent); }
+.pos-pager { display: flex; gap: 8px; justify-content: center; margin-top: 18px; align-items: center; }
+.pos-pager button {
+  padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 13px;
+}
+.pos-pager button:hover:not(:disabled) { color: var(--text); border-color: var(--primary); }
+.pos-pager button:disabled { opacity: .4; cursor: not-allowed; }
+.pos-pager .page-info { font-size: 13px; color: var(--text-dim); }
+
 /* 对话面板 */
 .chat-box { display: flex; flex-direction: column; height: 60vh; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 14px; }
@@ -261,6 +307,15 @@ input, textarea, select { font-family: inherit; }
   padding: 0 24px; border: none; border-radius: 24px;
   background: linear-gradient(90deg, var(--primary), #4f46e5); color: #fff; font-size: 14px;
 }
+
+/* 页脚：让页面有落地感 */
+.footer {
+  padding: 18px 28px; margin-top: auto;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; color: var(--text-dim);
+}
+.footer .f-brand { display: flex; align-items: center; gap: 6px; }
 
 /* Toast */
 .toast {
@@ -320,16 +375,12 @@ input, textarea, select { font-family: inherit; }
   </div>
   <div class="main">
 
-    <!-- 条件解析 -->
+    <!-- 条件解析（左侧输入占满整列；右侧上为解析结果，下为匹配岗位滚动区） -->
     <div class="panel active" id="panel-parse">
       <div class="parse-grid">
         <div class="parse-input">
           <div class="section-title"><span class="dot"></span>输入你的报考条件</div>
           <textarea id="parseText" placeholder="例如：我是计算机本科，党员，应届，想考广州或深圳"></textarea>
-          <div class="mode-row">
-            <button class="mode-chip active" data-mode="beginner" onclick="setMode('beginner')">🌱 0 基础模式<small style="display:block;font-size:11px;margin-top:2px;opacity:.7">详细解释</small></button>
-            <button class="mode-chip" data-mode="advanced" onclick="setMode('advanced')">🚀 进阶模式<small style="display:block;font-size:11px;margin-top:2px;opacity:.7">精简结论</small></button>
-          </div>
           <div class="upload-types">
             <button class="upload-type active">🎓 毕业证/学位证（辅助校验学历与专业）</button>
           </div>
@@ -338,14 +389,48 @@ input, textarea, select { font-family: inherit; }
             <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="onFileChange(event)">
           </div>
           <button class="btn-primary" id="parseBtn" onclick="submitParse()">开始解析</button>
+          <div class="parse-tips">
+            <b>💡 不知道怎么写？照这样说就行</b><br>
+            「我本科读的计算机，党员，今年应届，想留在广州」<br>
+            「软件工程硕士，毕业两年了，广东湖南都可以考虑」<br>
+            学历、专业、政治面貌、应届与否、想去的城市、基层工作年限，想到什么说什么。<br>
+            有毕业证也可以传一张，系统帮你核对学历和专业；解析完会自动存成档案，下次进来直接看。
+          </div>
         </div>
-        <div class="parse-result">
-          <div class="section-title"><span class="dot"></span>解析结果</div>
-          <div id="resultArea">
-            <div class="result-empty">
-              <div class="icon">🧭</div>
-              <div>提交条件后，这里会展示结构化的解析结果</div>
+        <div class="parse-right">
+          <div class="parse-result">
+            <div class="section-title"><span class="dot"></span>解析结果</div>
+            <div id="resultArea">
+              <div class="result-empty">
+                <div class="icon">🧭</div>
+                <div>提交条件后，这里会展示结构化的解析结果</div>
+              </div>
             </div>
+          </div>
+          <div class="match-section">
+            <div class="section-title"><span class="dot"></span>匹配岗位<span class="match-sub" id="matchSub">（解析后按你的条件自动筛选）</span></div>
+            <div class="pos-filter">
+              <select id="posExamType" onchange="loadPositions(1)">
+                <option value="">全部考试</option>
+                <option value="国考">国考</option>
+                <option value="省考">省考</option>
+              </select>
+              <input id="posProvince" placeholder="省份（默认取档案）" onkeydown="if(event.key==='Enter')loadPositions(1)">
+              <input id="posKeyword" placeholder="关键词（岗位名/单位）" onkeydown="if(event.key==='Enter')loadPositions(1)">
+              <select id="posEducation" onchange="loadPositions(1)">
+                <option value="">学历（默认取档案）</option>
+                <option value="大专">大专</option>
+                <option value="本科">本科</option>
+                <option value="硕士">硕士</option>
+                <option value="博士">博士</option>
+              </select>
+              <button class="btn-primary" style="width:auto;padding:8px 18px" onclick="loadPositions(1)">筛选</button>
+              <button class="btn-ghost" onclick="resetPosFilter()">↺ 重置</button>
+            </div>
+            <div class="pos-list-scroll" id="posList">
+              <div class="empty-tip">完成条件解析后，这里会展示匹配的岗位</div>
+            </div>
+            <div class="pos-pager" id="posPager"></div>
           </div>
         </div>
       </div>
@@ -384,6 +469,10 @@ input, textarea, select { font-family: inherit; }
     </div>
 
   </div>
+  <div class="footer">
+    <span class="f-brand">🎯 公考参谋部 · 智能选岗分析</span>
+    <span>数据来源于历年官方职位表 · 仅供参考</span>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -393,7 +482,6 @@ const API = '';
 let token = localStorage.getItem('token') || '';
 let username = localStorage.getItem('username') || '';
 let authMode = 'login';
-let mode = 'beginner';
 let imageBase64 = '';
 let lastParseResult = null;
 
@@ -480,6 +568,8 @@ function renderStoredProfile(profile, sessionId) {
   }
   html += '</div>';
   area.innerHTML = html;
+  // 已有档案时自动按条件加载匹配岗位
+  applyProfileFilters(profile);
 }
 function logout() {
   token = ''; username = '';
@@ -495,11 +585,6 @@ function switchPanel(name) {
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
   if (name === 'favorites') loadFavorites();
 }
-function setMode(m) {
-  mode = m;
-  document.querySelectorAll('.mode-chip').forEach(c => c.classList.toggle('active', c.dataset.mode === m));
-}
-
 // ---------- 图片上传 ----------
 function onFileChange(e) {
   const file = e.target.files[0];
@@ -543,12 +628,16 @@ async function submitParse() {
   btn.disabled = true;
   btn.innerHTML = '<span class="loading"></span>解析中...';
   try {
-    // 多源融合：文本与毕业证图片可同时提交
-    const body = { content: text, mode };
+    // 多源融合：文本与毕业证图片可同时提交（模式选择已移除：解析是客观抽取，
+    // 模式差异属于报告/对话环节，后续 advise 链路再接）
+    const body = { content: text };
     if (imageBase64) body.images = [{ type: 'diploma_image', base64: imageBase64 }];
     const data = await api('/api/v1/parse', { method: 'POST', body: JSON.stringify(body) });
     lastParseResult = data.data;
     renderParseResult(data.data);
+    // 解析成功/部分成功都用新条件刷新匹配岗位
+    const p = data.data.profile || data.data.profile_partial;
+    if (p) applyProfileFilters(p);
   } catch (e) {
     toast(e.message, 'error');
   } finally {
@@ -601,6 +690,7 @@ async function submitConfirm() {
     });
     lastParseResult = data.data;
     renderParseResult(data.data);
+    if (data.data.profile) applyProfileFilters(data.data.profile);
     toast('确认成功，条件已完善', 'success');
   } catch (e) {
     toast(e.message, 'error');
@@ -608,11 +698,17 @@ async function submitConfirm() {
 }
 
 // ---------- 收藏 ----------
+let favSet = new Set();   // 已收藏岗位 ID 集合（驱动收藏按钮的切换状态）
+let lastPosList = [];     // 最近一次岗位列表（收藏状态变化时重渲染按钮）
+
 async function loadFavorites() {
   if (!token) return;
   try {
     const data = await api('/api/v1/favorites');
-    renderFavorites(data.data || []);
+    const list = data.data || [];
+    favSet = new Set(list.map(f => f.PositionID));
+    renderFavorites(list);
+    renderPositions(lastPosList); // 同步岗位列表的按钮状态
   } catch (e) { /* 静默，列表区域保持 */ }
 }
 const CAT_NAMES = { rush: '🔥 冲刺', stable: '✅ 稳妥', safe: '🛡️ 保底', custom: '📌 自选' };
@@ -657,6 +753,108 @@ async function removeFavorite(posId) {
     await api('/api/v1/favorites', { method: 'POST', body: JSON.stringify({ position_id: posId, action: 'remove' }) });
     toast('已取消收藏', 'success');
     loadFavorites();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ---------- 岗位查询（默认按档案条件过滤，手动筛选在此之上叠加） ----------
+let posPage = 1;
+let posTotal = 0;
+let posBaseFilters = {}; // 档案条件（解析成功或加载档案后设置）
+const POS_PAGE_SIZE = 20;
+async function loadPositions(page) {
+  if (!token) return;
+  posPage = page || 1;
+  // 基础过滤（档案）+ 手动筛选（手动输入优先覆盖档案同名字段）
+  const params = new URLSearchParams();
+  for (const k in posBaseFilters) {
+    const v = posBaseFilters[k];
+    if (Array.isArray(v)) v.forEach(item => params.append(k, item)); // 多值（如省份数组）逐个追加
+    else params.set(k, v);
+  }
+  const examType = document.getElementById('posExamType').value;
+  const province = document.getElementById('posProvince').value.trim();
+  const keyword = document.getElementById('posKeyword').value.trim();
+  const education = document.getElementById('posEducation').value;
+  if (examType) params.set('exam_type', examType);
+  if (province) params.set('province', province);
+  if (keyword) params.set('keyword', keyword);
+  if (education) params.set('education', education);
+  params.set('page', posPage);
+  params.set('page_size', POS_PAGE_SIZE);
+  try {
+    const data = await api('/api/v1/positions?' + params.toString());
+    posTotal = data.data.total || 0;
+    renderPositions(data.data.positions || []);
+    renderPosPager();
+  } catch (e) { toast(e.message, 'error'); }
+}
+// 由档案生成基础过滤条件并刷新岗位列表
+function applyProfileFilters(profile) {
+  posBaseFilters = {};
+  if (profile.education) posBaseFilters.education = profile.education;
+  if (profile.major_category) posBaseFilters.major_category = profile.major_category;
+  if (profile.political_status) posBaseFilters.political = profile.political_status;
+  if (profile.is_fresh_graduate !== null && profile.is_fresh_graduate !== undefined) {
+    posBaseFilters.is_fresh = profile.is_fresh_graduate;
+  }
+  if (profile.target_provinces && profile.target_provinces.length) {
+    // 多目标省份：全部传给后端（IN 查询），不再只取第一个
+    posBaseFilters.provinces = profile.target_provinces;
+  }
+  document.getElementById('matchSub').textContent =
+    Object.keys(posBaseFilters).length ? '（已按你的档案条件筛选）' : '（档案条件为空，显示全部岗位）';
+  loadPositions(1);
+}
+// 重置筛选为档案默认条件
+function resetPosFilter() {
+  document.getElementById('posExamType').value = '';
+  document.getElementById('posProvince').value = '';
+  document.getElementById('posKeyword').value = '';
+  document.getElementById('posEducation').value = '';
+  loadPositions(1);
+}
+function renderPositions(list) {
+  lastPosList = list;
+  const el = document.getElementById('posList');
+  if (!list.length) { el.innerHTML = '<div class="empty-tip">没有符合条件的岗位</div>'; return; }
+  let html = '<table class="pos-table"><thead><tr><th>岗位</th><th>考区</th><th>条件要求</th><th>进面分</th><th>报录比</th><th></th></tr></thead><tbody>';
+  list.forEach(p => {
+    const conds = [p.EducationReq, p.MajorReqCategory, p.PoliticalReq,
+      p.FreshGraduateReq === true ? '限应届' : '', p.WorkExperienceYearsReq > 0 ? '基层' + p.WorkExperienceYearsReq + '年' : '']
+      .filter(Boolean).map(t => '<span class="pos-tag">' + esc(t) + '</span>').join('');
+    const remark = p.Remarks ? '<span class="pos-tag warn">⚠ ' + esc(p.Remarks) + '</span>' : '';
+    const score = p.Score2025 ? '<span class="pos-score">' + p.Score2025 + '</span><div style="font-size:11px;color:var(--text-dim)">' + (p.Score2024 ? '24年:' + p.Score2024 : '') + '</div>' : '-';
+    const posId = 'pos_' + p.ID;
+    const favored = favSet.has(posId);
+    const btnClass = favored ? 'btn-danger' : 'btn-primary';
+    const btnText = favored ? '★ 已收藏' : '收藏';
+    html += '<tr><td><div class="pos-name">' + esc(p.PositionName) + '</div><div class="pos-dept">' + esc(p.Department) + '</div>' + remark + '</td>' +
+      '<td>' + esc(p.ExamType) + ' · ' + esc(p.Province) + (p.City ? ' · ' + esc(p.City) : '') + '<div style="font-size:11px;color:var(--text-dim)">' + p.Year + '</div></td>' +
+      '<td>' + conds + '</td>' +
+      '<td>' + score + '</td>' +
+      '<td>' + esc(p.ApplicantRatio2025 || '-') + '</td>' +
+      '<td><button class="' + btnClass + '" style="width:auto;padding:6px 14px;font-size:12px" onclick="toggleFavorite(' + p.ID + ', \'' + esc(p.PositionName) + '\')">' + btnText + '</button></td></tr>';
+  });
+  el.innerHTML = html + '</tbody></table>';
+}
+function renderPosPager() {
+  const pages = Math.max(1, Math.ceil(posTotal / POS_PAGE_SIZE));
+  document.getElementById('posPager').innerHTML =
+    '<button ' + (posPage <= 1 ? 'disabled' : '') + ' onclick="loadPositions(' + (posPage - 1) + ')">上一页</button>' +
+    '<span class="page-info">第 ' + posPage + ' / ' + pages + ' 页 · 共 ' + posTotal + ' 条</span>' +
+    '<button ' + (posPage >= pages ? 'disabled' : '') + ' onclick="loadPositions(' + (posPage + 1) + ')">下一页</button>';
+}
+// 岗位收藏切换：已收藏 → 取消；未收藏 → 收藏
+async function toggleFavorite(posId, name) {
+  const pid = 'pos_' + posId;
+  const favored = favSet.has(pid);
+  try {
+    await api('/api/v1/favorites', {
+      method: 'POST',
+      body: JSON.stringify({ position_id: pid, action: favored ? 'remove' : 'add', notes: favored ? '' : name })
+    });
+    toast(favored ? '已取消收藏' : '已收藏：' + name, 'success');
+    loadFavorites(); // 重新拉取收藏集合并同步按钮状态
   } catch (e) { toast(e.message, 'error'); }
 }
 

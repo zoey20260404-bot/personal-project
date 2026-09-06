@@ -25,6 +25,19 @@ type User struct {
 // TableName 指定表名。
 func (User) TableName() string { return "users" }
 
+// UserProfileRecord 用户权威档案（一用户一条）：解析确认后的条件画像。
+// 与 user_sessions（每次解析的历史记录）区分：档案是唯一权威当前值。
+type UserProfileRecord struct {
+	ID        uint64 `gorm:"primaryKey;autoIncrement"`   // 自增主键
+	UserID    uint64 `gorm:"column:user_id;uniqueIndex"` // 归属用户（唯一）
+	Profile   string `gorm:"column:profile;type:json"`   // 条件画像（UserProfile JSON）
+	CreatedAt int64  `gorm:"autoCreateTime"`             // 创建时间
+	UpdatedAt int64  `gorm:"autoUpdateTime"`             // 更新时间
+}
+
+// TableName 指定表名。
+func (UserProfileRecord) TableName() string { return "user_profiles" }
+
 // UserSession 用户查询会话（PRD 5.3），归属注册用户。
 type UserSession struct {
 	ID        uint64 `gorm:"primaryKey;autoIncrement"`              // 自增主键
@@ -67,7 +80,7 @@ func NewMySQLStore(dsn string) (*MySQLStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("连接 MySQL 失败: %w", err)
 	}
-	if err := db.AutoMigrate(&User{}, &UserSession{}, &Favorite{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &UserSession{}, &UserProfileRecord{}, &Favorite{}, &Position{}); err != nil {
 		return nil, fmt.Errorf("迁移表结构失败: %w", err)
 	}
 	return &MySQLStore{db: db}, nil
@@ -119,6 +132,28 @@ func (s *MySQLStore) UpsertSession(session *UserSession) error {
 		updates["user_id"] = session.UserID
 	}
 	return s.db.Model(&existing).Updates(updates).Error
+}
+
+// GetUserProfile 查询用户权威档案，不存在返回 nil, nil。
+func (s *MySQLStore) GetUserProfile(userID uint64) (*UserProfileRecord, error) {
+	var rec UserProfileRecord
+	err := s.db.Where("user_id = ?", userID).First(&rec).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
+// UpsertUserProfile 保存/更新用户权威档案（按 user_id 唯一）。
+func (s *MySQLStore) UpsertUserProfile(userID uint64, profileJSON string) error {
+	rec := UserProfileRecord{UserID: userID, Profile: profileJSON}
+	return s.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"profile"}),
+	}).Create(&rec).Error
 }
 
 // GetLatestSessionByUser 查询用户最近的会话记录（按创建时间倒序取第一条）。

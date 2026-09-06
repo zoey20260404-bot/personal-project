@@ -14,6 +14,7 @@ type Services struct {
 	User     *UserService     // 用户注册/登录/令牌
 	Favorite *FavoriteService // 岗位收藏
 	Parse    *ParseService    // 条件解析编排
+	Position *PositionService // 岗位查询（Researcher 初版）
 }
 
 // NewServices 装配全部业务服务。
@@ -23,5 +24,6 @@ func NewServices(mysql *store.MySQLStore, supervisor *agent.Supervisor, jwtSecre
 		User:     NewUserService(mysql, jwtSecret, jwtExpireHours),
 		Favorite: NewFavoriteService(mysql),
 		Parse:    NewParseService(supervisor, mysql, logger),
+		Position: NewPositionService(mysql),
 	}
 }

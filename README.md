@@ -299,3 +299,17 @@ A：四步——①感知：白名单工具定义（名称/描述/参数 Schema�
 A：两个维度别混——ReAct 管"单轮内的推理深度"，多轮对话管"跨轮的记忆"。本项目里对话入口的 Agent 用 ReAct（需要自主决策调不调工具），流水线节点用 llm_step/code（执行确定性任务）。
 
 工具是抽象能力，里面可以装任何东西：简单函数/SQL（query_positions）、内部业务服务（update_profile）、**另一个 Agent 的流程**（run_advise 就是包了四个节点的流水线）、第三方 SDK、外部 HTTP API。这是"Agents as Tools"模式——上层 Agent 把下游整条子链路当作一个能力调用，内部随便改，上层无感知，系统因此成为可嵌套的积木。
+
+**Q：llm_step 算是 Agent 吗？**
+
+A：严格说不算——它是"套了节点外壳的一次 LLM 调用"。**节点是运行时单元，Agent 是行为属性**（核心特征是自主决策）。自主程度分级：`code`（0 决策）< `llm_step`（固定输出）< `router`（单次判断）< `react`（循环决策）。
+
+统一包装成节点的收益：寻址统一（flows 不关心下游是 LLM 还是代码）、生命周期统一（启动/停止/panic 恢复）、可观测统一（TraceID/事件流）、可替换（researcher 想升级智能只改配置 `type: code→react`）。这与企业级 workflow 引擎（Dify 节点、LangGraph node）同思路：统一节点抽象，内部自由度不同。
+
+**Q：项目里所有 Agent 在哪里定义？怎么运行的？**
+
+A：全部声明在 `configs/config.yaml` 的 `agents` 表（名字 + 类型 + 模型渠道 + Prompt + 工具白名单 + 温度），新增 Agent = 加一行配置。
+
+运行时：`BuildRuntime` 按表装配 → 每个节点注册到总线 → `Runtime.Start` 给每个节点起一个 goroutine 跑 `Run` 循环（阻塞在各自 Inbox 上等消息，不占 CPU）→ 另有 1 个总线分发协程。启动日志可见节点总数（如 `count=8`）。
+
+闭环：**配置声明 → 装配成节点 → 各自协程运行 → 总线通信**。

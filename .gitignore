@@ -20,3 +20,6 @@ configs/config.yaml
 # 规则：docs 下所有 *-todo.md（迭代待办）与 *-issues.md（问题记录）类文件
 docs/**/*-todo.md
 docs/**/*-issues.md
+
+# 面试评估文档（自用，不入库）
+EVALUATION.md

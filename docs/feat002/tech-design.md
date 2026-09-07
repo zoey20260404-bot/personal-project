@@ -97,18 +97,9 @@ SSE（text/event-stream）：ReAct 循环中工具调用过程发"思考中"事�
 | P1 | Router + advisor + 四个工具 + chat 接口 | ✅ 已实现（2026-09-06） |
 | P2 | 记忆接入（短期 Redis 缓冲 + 长期 pgvector 召回） | ✅ 已实现（记忆写入待 embedding 密钥配置后生效） |
 | P2.5 | SSE 流式输出（status/tool/delta/done 事件，逐 token） | ✅ 已实现（2026-09-06，事件经总线 pending 条目跨节点透传） |
-| P3 | interviewer（复用 ReAct，现有多轮追问入口） | 已编码，真实模型交互待验收 |
+| P3 | interviewer（纯 Prompt，最简单） | 待启动 |
 | P4 | exam_coach（依赖 TODO-1 题库数据源） | 阻塞 |
 | P5 | group_discussion（编排最复杂） | 待细化（TODO-3） |
-
-### P3 实现（2026-09-07）
-
-- 沿用最新配置已有 `interviewer` 定义，补齐 `PromptInterviewer` 常量与注册表；两份配置的非敏感配置项已核对一致，无需覆盖本地密钥或节点。
-- 仍走 ChatService → Router → ReAct → SSE；仅将 Router 输入改为与目标节点相同的历史+本轮问题，读取已有 20 条缓冲窗口。
-- 练习/模拟模式由自然语言与历史恢复，`mode` 字段仍为 beginner/advanced 表达风格，不新增 API 或状态表。
-- ReAct 执行前校验已有工具白名单，保证面试节点不执行模型伪造的工具调用。
-- Web 仅修改现有聊天框的提示、textarea、换行展示和发送锁，不增加 Tab、按钮入口或独立会话流程。
-- 离线测试覆盖配置装配、模板渲染、上下文传递及工具隔离；不等同于模型语义准确率验收。
 
 ### P1 落地说明（技术清单对照）
 

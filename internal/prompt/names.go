@@ -11,4 +11,7 @@ const (
 	NameAssistantAdvanced = "assistant_advanced" // 通用问答-进阶模式
 	NameRouter            = "router"             // 意图路由（feat002）
 	NameAdvisor           = "advisor"            // 选岗参谋（feat002，支持 {{.Mode}}/{{.Profile}}/{{.Memories}} 变量）
+	NameAnalyzer          = "analyzer"           // 竞争分析（feat004）
+	NameStrategist        = "strategist"         // 冲稳保策略（feat004）
+	NameResponder         = "responder"          // 报告生成（feat004，{{.Mode}} 变体）
 )

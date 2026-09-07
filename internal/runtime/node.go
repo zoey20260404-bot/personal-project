@@ -64,9 +64,10 @@ func (n *Node) Run(ctx context.Context, bus *Bus) {
 			return
 		case msg := <-n.Inbox:
 			// 只处理发给自己的消息（广播由分发层展开，这里不再判断）
-			// 每消息上下文：注入 TraceID + 用户身份 + 事件转发 sink（跨总线恢复）
+			// 每消息上下文：注入 TraceID + 用户身份 + Prompt 变量 + 事件转发 sink（跨总线恢复）
 			msgCtx := WithTraceID(ctx, msg.TraceID)
 			msgCtx = WithUserID(msgCtx, msg.UserID)
+			msgCtx = WithPromptVars(msgCtx, StringsToVars(msg.Vars))
 			msgCtx = WithEventSink(msgCtx, func(ev StreamEvent) { bus.EmitToMessage(msg.ID, ev) })
 			reply, err := n.safeHandle(msgCtx, msg)
 			if err != nil {

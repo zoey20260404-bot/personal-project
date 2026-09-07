@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"ai-start/internal/agent"
+	"ai-start/internal/runtime"
 	"ai-start/internal/store"
 )
 
@@ -15,16 +16,19 @@ type Services struct {
 	Favorite *FavoriteService // 岗位收藏
 	Parse    *ParseService    // 条件解析编排
 	Position *PositionService // 岗位查询（Researcher 初版）
+	Advise   *AdviseService   // 选岗推荐（feat004 冲稳保主链路）
 }
 
 // NewServices 装配全部业务服务。
 // 依赖为具体存储/调度组件，由 svc 层注入；mysql 为 nil 时相关能力降级。
 // memory 用于规则触发的用户记忆沉淀（档案变更/收藏等明确信号）。
-func NewServices(mysql *store.MySQLStore, supervisor *agent.Supervisor, jwtSecret string, jwtExpireHours int, logger *slog.Logger, memory *agent.Memory) *Services {
+func NewServices(mysql *store.MySQLStore, supervisor *agent.Supervisor, flows *runtime.FlowExecutor, jwtSecret string, jwtExpireHours int, logger *slog.Logger, memory *agent.Memory) *Services {
+	parse := NewParseService(supervisor, mysql, logger, memory)
 	return &Services{
 		User:     NewUserService(mysql, jwtSecret, jwtExpireHours),
 		Favorite: NewFavoriteService(mysql, memory),
-		Parse:    NewParseService(supervisor, mysql, logger, memory),
+		Parse:    parse,
 		Position: NewPositionService(mysql),
+		Advise:   NewAdviseService(flows, mysql, parse, logger),
 	}
 }

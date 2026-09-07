@@ -33,8 +33,9 @@ func NewRouter(h *Handler) *gin.Engine {
 		v1.GET("/positions", h.ListPositions)     // 岗位查询（分页筛选，页面展示）
 		v1.POST("/favorites", h.Favorite)         // 收藏/取消收藏岗位
 		v1.GET("/favorites", h.ListFavorites)     // 收藏列表
-		v1.POST("/chat", h.Chat)                  // 多轮追问（P1 占位）
-		// TODO: POST /api/v1/advise 选岗推荐、GET /api/v1/reports/:id
+		v1.POST("/chat", h.Chat)                  // 多轮追问（SSE 流式）
+		v1.GET("/reports", h.ListReports)         // 选岗报告列表（feat004）
+		v1.GET("/reports/:id", h.GetReport)       // 报告详情
 	}
 
 	return r

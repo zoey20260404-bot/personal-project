@@ -148,9 +148,21 @@ func NewServiceContext(cfg *config.Config) (*ServiceContext, error) {
 			Content:   content,
 		})
 	}))
+	// 选岗推荐工具：触发 advise 流程（feat004，事件经 ctx sink 透传 SSE 进度）
+	svc.Tools.Register(tool.NewRunAdviseTool(func(ctx context.Context, userID uint64) (*store.Report, error) {
+		// 用户模式从 Prompt 变量取（编排层注入，跨总线经消息传播）
+		mode := "beginner"
+		if vars := runtime.PromptVarsFromContext(ctx); vars != nil {
+			if m, ok := vars["Mode"].(string); ok && m != "" {
+				mode = m
+			}
+		}
+		// 会话 ID 从追踪上下文缺省（报告归属用户即可）
+		return svc.Services.Advise.Run(ctx, userID, "", mode)
+	}))
 
 	// 多 Agent 运行时（去中心化总线架构）+ 流程编排器
-	rt, err := agent.BuildRuntime(cfg.Agents, cfg.Runtime, svc.Models, svc.Prompts, svc.Tools, logger, svc.Memory)
+	rt, err := agent.BuildRuntime(cfg.Agents, cfg.Runtime, svc.Models, svc.Prompts, svc.Tools, logger, svc.Memory, svc.MySQL)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +178,7 @@ func NewServiceContext(cfg *config.Config) (*ServiceContext, error) {
 	}
 
 	// 业务服务层：Handler 经此调用业务逻辑（api 层不直接触碰存储）
-	svc.Services = logic.NewServices(svc.MySQL, svc.Supervisor, svc.JWTSecret, cfg.JWT.ExpireHours, logger, svc.Memory)
+	svc.Services = logic.NewServices(svc.MySQL, svc.Supervisor, svc.Flows, svc.JWTSecret, cfg.JWT.ExpireHours, logger, svc.Memory)
 
 	// 短期会话缓冲：Redis 优先，不可用降级内存
 	if svc.Redis != nil {

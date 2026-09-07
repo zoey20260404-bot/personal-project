@@ -245,3 +245,57 @@ go run ./scripts/import_positions --file 职位表.xlsx --exam-type 省考 --yea
   - `POST /api/v1/parse/confirm`：OCR 低置信度字段确认修正
   - `POST /api/v1/favorites` / `GET /api/v1/favorites`：收藏/取消收藏/收藏列表（按登录用户隔离）
   - `POST /api/v1/chat`：多轮追问（P1 占位，后续迭代接入）
+
+## 核心链路速查（feat004 选岗推荐）
+
+### advise 执行链（从用户说话到报告落库）
+
+```plain
+用户："帮我生成选岗报告"
+  → internal/api/chat.go（SSE 入口）
+  → internal/api/logic/chat.go（ChatService：短期记忆 + 画像 + 路由）
+  → router 节点（意图分类）→ advisor
+  → internal/agent/react.go（advisor ReAct 循环）→ 调 run_advise 工具
+  → internal/tool/advise.go → svc 闭包注入
+  → internal/api/logic/advise.go（AdviseService.Run：建档 → 执行流程 → 落库）
+  → flows.advise 流程（configs/config.yaml 配置节点顺序）
+      researcher（纯代码 SQL 检索）→ analyzer（LLM 竞争分析）→ strategist（LLM 冲稳保）→ responder（LLM 报告）
+  → internal/store/report.go（reports 表落库）→ SSE 回显
+```
+
+### 代码速查表
+
+| 环节 | 位置 |
+| --- | --- |
+| 触发工具 | `internal/tool/advise.go` |
+| 业务编排 | `internal/api/logic/advise.go` |
+| 流程配置 | `configs/config.yaml` flows 段 |
+| 节点装配 | `internal/agent/nodes.go`（BuildRuntime） |
+| 节点实现 | `internal/agent/advise.go` |
+| Prompt | `internal/prompt/prompts_advise.go` |
+| 报告存储 | `internal/store/report.go` |
+| 报告接口 | `internal/api/report.go` |
+
+### Q&A
+
+**Q：router 是 ReAct 吗？**
+
+A：不是，是**两级决策**：router 是一次性 LLM 分类（无循环无工具，低温求稳）；目标 Agent（如 advisor）才是 ReAct（思考→调工具→再思考）。advise 流水线内部的四个节点也不是 ReAct——`llm_step` 单次调用 + `code` 纯代码节点。三种形态：分类（router）、推理循环（react）、固定步骤（llm_step/code）。
+
+**Q：ReAct 和 advisor 是什么关系？**
+
+A：ReAct 是**类型/工作方式**（模具），advisor 是**具体 Agent**（实例）。配置里 `advisor: {type: react}`——同一类型可有多个实例（advisor、assistant），各自独立的 Prompt/工具白名单/温度/记忆，注册为总线上按名字路由的独立节点。新增 ReAct Agent = 配置表加一条新名字。
+
+**Q：advisor 的步骤流（researcher 等）在哪？**
+
+A：不在 advisor 里面。它们是总线上的平等节点，由 `flows.advise` 配置串成流水线，advisor 只通过 `run_advise` 工具触发。两层分工：ReAct 决定"做不做"（决策层），flow 保证"怎么做"（执行层确定性）。
+
+**Q：advisor 如何感知和调用工具？**
+
+A：四步——①感知：白名单工具定义（名称/描述/参数 Schema）随请求发给模型；②决策：模型回复 tool_calls（自己选工具填参数）；③执行：ReAct 循环经工具注册表按名执行（白名单校验 + JWT 身份校验）；④反馈：结果回填消息再调模型，得到基于真实数据的回答。工具实现在 `internal/tool/`（一文件一工具），业务逻辑在 logic 层（工具是薄壳，svc 装配时闭包注入）。
+
+**Q：是不是只有 ReAct 能多轮对话？工具可以是什么？**
+
+A：两个维度别混——ReAct 管"单轮内的推理深度"，多轮对话管"跨轮的记忆"。本项目里对话入口的 Agent 用 ReAct（需要自主决策调不调工具），流水线节点用 llm_step/code（执行确定性任务）。
+
+工具是抽象能力，里面可以装任何东西：简单函数/SQL（query_positions）、内部业务服务（update_profile）、**另一个 Agent 的流程**（run_advise 就是包了四个节点的流水线）、第三方 SDK、外部 HTTP API。这是"Agents as Tools"模式——上层 Agent 把下游整条子链路当作一个能力调用，内部随便改，上层无感知，系统因此成为可嵌套的积木。

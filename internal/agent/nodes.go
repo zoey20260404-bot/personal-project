@@ -10,6 +10,7 @@ import (
 	"ai-start/internal/llm"
 	"ai-start/internal/prompt"
 	"ai-start/internal/runtime"
+	"ai-start/internal/store"
 	"ai-start/internal/tool"
 	"ai-start/internal/types"
 )
@@ -25,7 +26,8 @@ type parseTask struct {
 // 每个 Agent 配置变成一个独立 Node，各自 goroutine 运行，通过总线通信。
 // 新增 Agent：在配置 agents 表中加定义（新类型时在 switch 中注册构造逻辑）。
 func BuildRuntime(agentCfgs map[string]config.AgentConfig, runtimeCfg config.RuntimeConfig,
-	manager *llm.Manager, prompts *prompt.Store, tools *tool.Registry, logger *slog.Logger, memory *Memory) (*runtime.Runtime, error) {
+	manager *llm.Manager, prompts *prompt.Store, tools *tool.Registry, logger *slog.Logger, memory *Memory,
+	mysql *store.MySQLStore) (*runtime.Runtime, error) {
 
 	rt := runtime.NewRuntime(runtimeCfg.BusBuffer, logger)
 
@@ -39,11 +41,68 @@ func BuildRuntime(agentCfgs map[string]config.AgentConfig, runtimeCfg config.Run
 		case AgentTypeRouter:
 			router := NewRouterAgent(manager, ac.Model, prompts, "advisor") // 兜底目标：选岗参谋
 			rt.Register(NewRouterNode(name, router, runtimeCfg.NodeInbox))
+		case AgentTypeCode:
+			// 纯代码节点（当前内置：researcher 岗位检索）
+			if name == "researcher" {
+				rt.Register(NewResearcherNode(name, mysql, runtimeCfg.NodeInbox))
+			} else {
+				return nil, fmt.Errorf("code 类型节点 %q 未注册实现", name)
+			}
+		case AgentTypeLLMStep:
+			spec, ok := adviseStepSpecs[name]
+			if !ok {
+				return nil, fmt.Errorf("llm_step 节点 %q 未注册行为定义", name)
+			}
+			rt.Register(NewAdviseStepNode(name, stepLabels[name], AgentConfigLite{
+				Model: ac.Model, Prompt: ac.Prompt, Temperature: ac.Temperature,
+				Validator: spec.Validator,
+			}, spec, manager, prompts, runtimeCfg.NodeInbox))
 		default:
 			return nil, fmt.Errorf("Agent %q 类型 %q 未支持", name, ac.Type)
 		}
 	}
 	return rt, nil
+}
+
+// stepLabels llm_step 节点的 SSE 进度文案。
+var stepLabels = map[string]string{
+	"analyzer":   "⚖️ 正在分析岗位竞争烈度与风险…",
+	"strategist": "🎯 正在制定冲稳保策略…",
+	"responder":  "📝 正在撰写你的专属报告…",
+}
+
+// adviseStepSpecs advise 流水线各节点的行为定义（输入提取/输出包裹/校验）。
+var adviseStepSpecs = map[string]adviseStepSpec{
+	"analyzer": {
+		LLMInput: func(ac *adviseContext) string {
+			data, _ := json.Marshal(map[string]any{"profile": ac.Profile, "candidates": ac.Candidates})
+			return string(data)
+		},
+		Wrap: func(ac *adviseContext, output string) *adviseContext {
+			ac.Analysis = json.RawMessage(extractJSON(output))
+			return ac
+		},
+		Validator: validateAnalyses,
+	},
+	"strategist": {
+		LLMInput: func(ac *adviseContext) string {
+			data, _ := json.Marshal(map[string]any{"profile": ac.Profile, "analyses": ac.Analysis})
+			return string(data)
+		},
+		Wrap: func(ac *adviseContext, output string) *adviseContext {
+			ac.Strategy = json.RawMessage(extractJSON(output))
+			return ac
+		},
+	},
+	"responder": {
+		// 报告撰写拿全量上下文（含候选岗位真实名称/分数线），禁止编造
+		LLMInput: func(ac *adviseContext) string {
+			data, _ := json.Marshal(ac)
+			return string(data)
+		},
+		// 报告是最终产物，直接输出原文（不再包裹）
+		Wrap: nil,
+	},
 }
 
 // NewRouterNode 创建意图路由节点：任务为用户问题，回复为路由结果 JSON。

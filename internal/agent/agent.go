@@ -14,7 +14,9 @@ type Agent interface {
 
 // Agent 类型常量：配置 agents 表中 type 字段的合法取值。
 const (
-	AgentTypeParser = "parser" // 条件解析 Agent
-	AgentTypeReact  = "react"  // ReAct 推理-行动循环 Agent
-	AgentTypeRouter = "router" // 意图路由 Agent（feat002）
+	AgentTypeParser  = "parser"   // 条件解析 Agent
+	AgentTypeReact   = "react"    // ReAct 推理-行动循环 Agent
+	AgentTypeRouter  = "router"   // 意图路由 Agent（feat002）
+	AgentTypeCode    = "code"     // 纯代码节点（不调 LLM，如 researcher）
+	AgentTypeLLMStep = "llm_step" // 单次 LLM 调用节点（流水线步骤）
 )

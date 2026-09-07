@@ -80,7 +80,7 @@ func NewMySQLStore(dsn string) (*MySQLStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("连接 MySQL 失败: %w", err)
 	}
-	if err := db.AutoMigrate(&User{}, &UserSession{}, &UserProfileRecord{}, &Favorite{}, &Position{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &UserSession{}, &UserProfileRecord{}, &Favorite{}, &Position{}, &Report{}); err != nil {
 		return nil, fmt.Errorf("迁移表结构失败: %w", err)
 	}
 	return &MySQLStore{db: db}, nil

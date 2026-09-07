@@ -34,8 +34,9 @@ func (f *FlowExecutor) Run(ctx context.Context, flowName, input string) (string,
 		return "", fmt.Errorf("流程 %q 未配置", flowName)
 	}
 	current := input
+	sink := SinkFromContext(ctx) // 事件透传：流程节点的进度事件回传给调用方（如 SSE）
 	for _, node := range steps {
-		reply, err := f.runtime.Call(ctx, "flow:"+flowName, node, MsgTypeTask, current, f.timeout)
+		reply, err := f.runtime.CallWithSink(ctx, "flow:"+flowName, node, MsgTypeTask, current, f.timeout, sink)
 		if err != nil {
 			return "", fmt.Errorf("流程 %q 节点 %q 执行失败: %w", flowName, node, err)
 		}

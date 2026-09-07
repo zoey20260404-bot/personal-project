@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"ai-start/internal/agent"
 	"ai-start/internal/runtime"
@@ -47,6 +48,11 @@ const (
 // clarifyReply 意图不明时的反问文案。
 const clarifyReply = "我没有完全理解你的意思。你是想：1）咨询选岗/岗位推荐 2）练习笔试题目 3）模拟面试？跟我说一句就行。"
 
+// chatCallTimeout chat 场景 Agent 调用超时。
+// advise 流程嵌入 run_advise 工具执行（researcher→analyzer→strategist→responder 多次 LLM 调用），
+// 需要比默认 30s 更长的预算。
+const chatCallTimeout = 5 * time.Minute
+
 // Chat 对话主流程。sink 非空时启用流式（状态/工具/逐 token 事件经 SSE 下发）。
 func (s *ChatService) Chat(ctx context.Context, userID uint64, sessionID, question, mode string, sink runtime.EventSink) (*ChatReply, error) {
 	if sessionID == "" {
@@ -80,7 +86,7 @@ func (s *ChatService) Chat(ctx context.Context, userID uint64, sessionID, questi
 		"Profile": s.profileSummary(userID),
 		// Memories 变量由目标 Agent 自召回填充（agent 作用域隔离）
 	}
-	reply, err := s.runtime.CallWithSink(agent.WithPromptVars(ctx, vars), "chat", route.Target, runtime.MsgTypeTask, userContent, runtime.DefaultCallTimeout, sink)
+	reply, err := s.runtime.CallWithSink(runtime.WithPromptVars(ctx, vars), "chat", route.Target, runtime.MsgTypeTask, userContent, chatCallTimeout, sink)
 	var answer string
 	if err != nil {
 		s.logger.Warn("Agent 调用失败，返回兜底回复", "agent", route.Target, "err", err, "trace_id", traceID)

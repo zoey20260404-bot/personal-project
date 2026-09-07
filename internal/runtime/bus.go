@@ -32,14 +32,15 @@ var ErrReplyTimeout = errors.New("等待 Agent 回复超时")
 
 // Message Agent 间通信协议。
 type Message struct {
-	ID        string    // 关联 ID：响应与请求同 ID，用于请求-响应配对
-	TraceID   string    // 链路追踪 ID（一次外部请求贯穿所有 Agent 消息）
-	UserID    uint64    // 用户身份（JWT 透传，跨总线传播；工具执行的身份来源）
-	From      string    // 发送方节点名
-	To        string    // 接收方节点名，空表示广播
-	Type      string    // task / result / error / review
-	Content   string    // 消息体（业务数据，通常为 JSON）
-	CreatedAt time.Time // 创建时间
+	ID        string            // 关联 ID：响应与请求同 ID，用于请求-响应配对
+	TraceID   string            // 链路追踪 ID（一次外部请求贯穿所有 Agent 消息）
+	UserID    uint64            // 用户身份（JWT 透传，跨总线传播；工具执行的身份来源）
+	Vars      map[string]string // Prompt 模板变量（动态 Prompt 跨总线传播）
+	From      string            // 发送方节点名
+	To        string            // 接收方节点名，空表示广播
+	Type      string            // task / result / error / review
+	Content   string            // 消息体（业务数据，通常为 JSON）
+	CreatedAt time.Time         // 创建时间
 }
 
 // newMsgID 生成消息关联 ID。
@@ -100,11 +101,12 @@ func (b *Bus) Call(ctx context.Context, from, to, msgType, content string, timeo
 		Type:    msgType,
 		Content: content,
 	}
-	// 从上下文继承链路追踪 ID 与用户身份（跨总线传播）
+	// 从上下文继承链路追踪 ID、用户身份与 Prompt 变量（跨总线传播）
 	if traceID, ok := ctx.Value(traceIDKey{}).(string); ok {
 		msg.TraceID = traceID
 	}
 	msg.UserID = UserIDFromContext(ctx)
+	msg.Vars = VarsToStrings(PromptVarsFromContext(ctx))
 
 	replyCh := make(chan Message, 1)
 	b.pending.Store(msg.ID, pendingEntry{replyCh: replyCh, target: to, sink: sink})

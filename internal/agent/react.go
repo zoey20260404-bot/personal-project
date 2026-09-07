@@ -79,7 +79,7 @@ func (a *ReActAgent) Name() string { return a.name }
 func (a *ReActAgent) Run(ctx context.Context, input string) (string, error) {
 	// 经验自召回（feat003）：Agent 开头召回自己的长期记忆（agent/user 作用域），
 	// 与编排层的短期历史互补——编排层管"刚才聊了啥"，Agent 管"我记得什么"。
-	vars := promptVarsFromContext(ctx)
+	vars := runtime.PromptVarsFromContext(ctx)
 	if a.memory != nil {
 		if userID := runtime.UserIDFromContext(ctx); userID != 0 {
 			if recalled := a.memory.Recall(ctx, a.name, userID, "", input, 5); len(recalled) > 0 {

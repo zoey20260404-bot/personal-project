@@ -10,6 +10,7 @@ const (
 	NameAssistantBeginner = "assistant_beginner" // 通用问答-0 基础模式
 	NameAssistantAdvanced = "assistant_advanced" // 通用问答-进阶模式
 	NameRouter            = "router"             // 意图路由（feat002）
+	NameInterviewer       = "interviewer"        // 结构化面试考官（feat002 P3）
 	NameAdvisor           = "advisor"            // 选岗参谋（feat002，支持 {{.Mode}}/{{.Profile}}/{{.Memories}} 变量）
 	NameAnalyzer          = "analyzer"           // 竞争分析（feat004）
 	NameStrategist        = "strategist"         // 冲稳保策略（feat004）

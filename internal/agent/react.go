@@ -133,6 +133,17 @@ func (a *ReActAgent) Run(ctx context.Context, input string) (string, error) {
 		// 记录 assistant 的工具调用消息，随后逐个执行工具并回填结果
 		messages = append(messages, *resp)
 		for _, call := range resp.ToolCalls {
+			// 无工具面试节点也必须在执行层隔离，不能信任模型返回的工具名。
+			allowed := false
+			for _, def := range a.toolDefs {
+				if def.Name == call.Name {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return "", fmt.Errorf("Agent %s 无权调用工具 %q", a.name, call.Name)
+			}
 			runtime.EmitToolEvent(ctx, a.name, call.Name) // 前端可见"正在调用工具"
 			a.logger.Info("ReAct 调用工具",
 				"agent", a.name, "step", step, "tool", call.Name, "args", call.Arguments, "trace_id", runtime.TraceIDFromContext(ctx))

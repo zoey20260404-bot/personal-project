@@ -68,11 +68,14 @@ func (s *ChatService) Chat(ctx context.Context, userID uint64, sessionID, questi
 
 	// 1. 短期记忆：读取本会话最近消息（长期经验由各 Agent 自召回，编排层不管）
 	runtime.EmitEvent(ctx, runtime.EventStatus, "正在读取会话记忆…")
-	history, _ := s.buffer.Recent(ctx, sessionID, 10)
+	// 默认三题模拟含追问会超过十条消息，使用现有缓冲的完整二十条窗口。
+	history, _ := s.buffer.Recent(ctx, sessionID, 20)
 
 	// 2. 意图路由（LLM 判断目标 Agent）
 	runtime.EmitEvent(ctx, runtime.EventStatus, "正在识别你的意图…")
-	route := s.route(ctx, question)
+	// Router 和目标 Agent 共享最近对话，短作答也能关联上一轮面试题。
+	userContent := s.composeInput(history, question)
+	route := s.route(ctx, userContent)
 	if route.Clarify {
 		s.rememberAll(ctx, sessionID, question, clarifyReply)
 		return &ChatReply{SessionID: sessionID, Answer: clarifyReply, Agent: nodeRouter, TraceID: traceID}, nil
@@ -80,7 +83,6 @@ func (s *ChatService) Chat(ctx context.Context, userID uint64, sessionID, questi
 
 	// 3. 组装上下文并调用目标 Agent（ReAct + 工具白名单）
 	runtime.EmitEvent(ctx, runtime.EventStatus, fmt.Sprintf("已由「%s」接管，正在思考…", route.Target))
-	userContent := s.composeInput(history, question)
 	vars := map[string]any{
 		"Mode":    mode,
 		"Profile": s.profileSummary(userID),

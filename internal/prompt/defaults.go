@@ -10,6 +10,7 @@ var Defaults = map[string]string{
 	NameAssistantBeginner: PromptAssistantBeginner, // 通用问答-0 基础模式
 	NameAssistantAdvanced: PromptAssistantAdvanced, // 通用问答-进阶模式
 	NameRouter:            PromptRouter,            // 意图路由（feat002）
+	NameInterviewer:       PromptInterviewer,       // 结构化面试考官（feat002 P3）
 	NameAdvisor:           PromptAdvisor,           // 选岗参谋（feat002）
 	NameAnalyzer:          PromptAnalyzer,          // 竞争分析（feat004）
 	NameStrategist:        PromptStrategist,        // 冲稳保策略（feat004）

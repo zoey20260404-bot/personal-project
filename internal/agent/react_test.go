@@ -53,7 +53,7 @@ func TestReActToolLoop(t *testing.T) {
 		// 第 2 步：模型基于工具结果给出最终回答
 		{Role: "assistant", Content: "最终回答"},
 	}}
-	a := NewReActAgent("test", "chat", nil, "", 5, nil, caller, testToolRegistry("工具结果", &execCount), []string{"mock_tool"}, nil)
+	a := NewReActAgent("test", "chat", nil, "", 5, nil, caller, testToolRegistry("工具结果", &execCount), []string{"mock_tool"}, nil, nil)
 
 	answer, err := a.Run(context.Background(), "用户问题")
 	if err != nil {
@@ -78,7 +78,7 @@ func TestReActMaxSteps(t *testing.T) {
 		{Role: "assistant", ToolCalls: []llm.ToolCall{{ID: "c2", Name: "mock_tool", Arguments: "{}"}}},
 		{Role: "assistant", ToolCalls: []llm.ToolCall{{ID: "c3", Name: "mock_tool", Arguments: "{}"}}},
 	}}
-	a := NewReActAgent("test", "chat", nil, "", 3, nil, caller, testToolRegistry("工具结果", &execCount), []string{"mock_tool"}, nil)
+	a := NewReActAgent("test", "chat", nil, "", 3, nil, caller, testToolRegistry("工具结果", &execCount), []string{"mock_tool"}, nil, nil)
 
 	if _, err := a.Run(context.Background(), "用户问题"); err == nil {
 		t.Error("达到最大步数应返回错误")

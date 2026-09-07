@@ -1,8 +1,10 @@
 package logic
 
 import (
+	"context"
 	"errors"
 
+	"ai-start/internal/agent"
 	"ai-start/internal/store"
 )
 
@@ -15,21 +17,32 @@ var (
 
 // FavoriteService 收藏域业务逻辑。
 type FavoriteService struct {
-	mysql *store.MySQLStore
+	mysql  *store.MySQLStore
+	memory *agent.Memory // 长期记忆（收藏行为沉淀为用户画像，feat003）
 }
 
 // NewFavoriteService 创建收藏服务。
-func NewFavoriteService(mysql *store.MySQLStore) *FavoriteService {
-	return &FavoriteService{mysql: mysql}
+func NewFavoriteService(mysql *store.MySQLStore, memory *agent.Memory) *FavoriteService {
+	return &FavoriteService{mysql: mysql, memory: memory}
 }
 
 // Add 收藏岗位；重复收藏幂等（created=false）。
+// 收藏成功时沉淀一条 user 作用域记忆（用户偏好信号）。
 func (s *FavoriteService) Add(userID uint64, fav store.Favorite) (created bool, err error) {
 	if s.mysql == nil {
 		return false, ErrFavoriteStoreOffline
 	}
 	fav.UserID = userID
-	return s.mysql.AddFavorite(&fav)
+	created, err = s.mysql.AddFavorite(&fav)
+	if err == nil && created && s.memory != nil {
+		s.memory.Remember(context.Background(), store.MemoryRecord{
+			UserID:  userID,
+			Scope:   store.ScopeUser,
+			Role:    "insight",
+			Content: "用户收藏了岗位 " + fav.PositionID + "（" + fav.Category + "类）",
+		})
+	}
+	return created, err
 }
 
 // Remove 取消收藏；记录不存在返回 ErrFavoriteNotFound。

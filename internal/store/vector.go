@@ -120,17 +120,19 @@ func (s *VectorStore) AddMemory(ctx context.Context, rec MemoryRecord, embedding
 	return err
 }
 
-// SearchMemories 分层召回记忆：指定 Agent 命名空间下，合并三层可见记忆——
-// agent 级经验（全局共享）+ 当前用户画像（跨会话）+ 当前会话消息，
+// SearchMemories 分层召回记忆，作用域语义（feat003 修正）：
+//   - agent 级经验：按 agent_name 隔离（各 Agent 的经验互不污染）
+//   - user 级画像：只按 user_id（跨 Agent 共享——用户是谁，谁都需要知道）
+//   - session 级会话：只按 session_id（跨 Agent 共享——用户视角是在和一个助手对话）
+//
 // 按余弦距离统一排序（越相似越靠前）。
 func (s *VectorStore) SearchMemories(ctx context.Context, agentName string, userID uint64, sessionID string, embedding []float32, topK int) ([]MemoryRecord, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT id, agent_name, user_id, session_id, scope, role, content, embedding <=> $4 AS distance
 		 FROM memories
-		 WHERE agent_name = $1
-		   AND (scope = 'agent'
-		        OR (scope = 'user' AND user_id = $2)
-		        OR (scope = 'session' AND session_id = $3))
+		 WHERE (scope = 'agent' AND agent_name = $1)
+		    OR (scope = 'user' AND user_id = $2)
+		    OR (scope = 'session' AND session_id = $3)
 		 ORDER BY embedding <=> $4 LIMIT $5`,
 		agentName, userID, sessionID, pgvector.NewVector(embedding), topK)
 	if err != nil {

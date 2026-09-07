@@ -21,19 +21,21 @@ type ChatReply struct {
 	TraceID   string `json:"trace_id"`   // 链路追踪 ID
 }
 
-// ChatService 多轮对话编排（feat002）：
-// 短期记忆（Redis 缓冲）+ 长期记忆（pgvector 向量召回）+ 意图路由 + ReAct 工具调用。
+// ChatService 多轮对话编排（feat002/feat003）。
+//
+// 记忆权责划分（feat003 修正）：
+//   - 编排层（本服务）：短期记忆（Redis 会话缓冲）+ 用户画像（MySQL 档案）
+//   - 各 Agent：长期经验记忆（pgvector，agent 作用域隔离）自召回、自沉淀
 type ChatService struct {
 	runtime *runtime.Runtime // 多 Agent 运行时
-	memory  *agent.Memory    // 长期记忆
 	buffer  store.ChatBuffer // 短期会话缓冲
 	parse   *ParseService    // 档案服务（取画像注入上下文）
 	logger  *slog.Logger     // 日志器（注入）
 }
 
 // NewChatService 创建对话服务。
-func NewChatService(rt *runtime.Runtime, memory *agent.Memory, buffer store.ChatBuffer, parse *ParseService, logger *slog.Logger) *ChatService {
-	return &ChatService{runtime: rt, memory: memory, buffer: buffer, parse: parse, logger: logger}
+func NewChatService(rt *runtime.Runtime, buffer store.ChatBuffer, parse *ParseService, logger *slog.Logger) *ChatService {
+	return &ChatService{runtime: rt, buffer: buffer, parse: parse, logger: logger}
 }
 
 // 节点名常量。
@@ -41,9 +43,6 @@ const (
 	nodeRouter  = "router"  // 意图路由节点
 	nodeAdvisor = "advisor" // 选岗参谋节点（兜底目标）
 )
-
-// noLLMReply LLM 未配置时的兜底回复。
-const noLLMReply = "AI 服务暂未配置模型密钥，暂时无法对话。你可以先使用「条件解析」和「岗位查询」功能。"
 
 // clarifyReply 意图不明时的反问文案。
 const clarifyReply = "我没有完全理解你的意思。你是想：1）咨询选岗/岗位推荐 2）练习笔试题目 3）模拟面试？跟我说一句就行。"
@@ -61,28 +60,25 @@ func (s *ChatService) Chat(ctx context.Context, userID uint64, sessionID, questi
 	}
 	traceID := runtime.TraceIDFromContext(ctx)
 
-	// 1. 短期记忆：读取本会话最近消息
+	// 1. 短期记忆：读取本会话最近消息（长期经验由各 Agent 自召回，编排层不管）
 	runtime.EmitEvent(ctx, runtime.EventStatus, "正在读取会话记忆…")
 	history, _ := s.buffer.Recent(ctx, sessionID, 10)
 
-	// 2. 长期记忆：向量召回相关记忆（session + user + agent 三层作用域）
-	recalled := s.memory.Recall(ctx, nodeAdvisor, userID, sessionID, question, 5)
-
-	// 3. 意图路由（LLM 判断目标 Agent）
+	// 2. 意图路由（LLM 判断目标 Agent）
 	runtime.EmitEvent(ctx, runtime.EventStatus, "正在识别你的意图…")
 	route := s.route(ctx, question)
 	if route.Clarify {
-		s.rememberAll(ctx, userID, sessionID, nodeRouter, question, clarifyReply)
+		s.rememberAll(ctx, sessionID, question, clarifyReply)
 		return &ChatReply{SessionID: sessionID, Answer: clarifyReply, Agent: nodeRouter, TraceID: traceID}, nil
 	}
 
-	// 4. 组装上下文并调用目标 Agent（ReAct + 工具白名单）
+	// 3. 组装上下文并调用目标 Agent（ReAct + 工具白名单）
 	runtime.EmitEvent(ctx, runtime.EventStatus, fmt.Sprintf("已由「%s」接管，正在思考…", route.Target))
-	userContent := s.composeInput(history, recalled, question)
+	userContent := s.composeInput(history, question)
 	vars := map[string]any{
-		"Mode":     mode,
-		"Profile":  s.profileSummary(userID),
-		"Memories": formatMemories(recalled),
+		"Mode":    mode,
+		"Profile": s.profileSummary(userID),
+		// Memories 变量由目标 Agent 自召回填充（agent 作用域隔离）
 	}
 	reply, err := s.runtime.CallWithSink(agent.WithPromptVars(ctx, vars), "chat", route.Target, runtime.MsgTypeTask, userContent, runtime.DefaultCallTimeout, sink)
 	var answer string
@@ -93,8 +89,8 @@ func (s *ChatService) Chat(ctx context.Context, userID uint64, sessionID, questi
 		answer = reply.Content
 	}
 
-	// 5. 写入短期 + 长期记忆
-	s.rememberAll(ctx, userID, sessionID, route.Target, question, answer)
+	// 4. 写入短期记忆（原始对话只进 Redis 缓冲；长期沉淀由各 Agent 自行决定）
+	s.rememberAll(ctx, sessionID, question, answer)
 
 	return &ChatReply{SessionID: sessionID, Answer: answer, Agent: route.Target, TraceID: traceID}, nil
 }
@@ -118,8 +114,8 @@ func (s *ChatService) route(ctx context.Context, question string) agent.RouteRes
 	return result
 }
 
-// composeInput 组装用户输入：短期历史 + 长期记忆 + 当前问题。
-func (s *ChatService) composeInput(history []store.ChatMessage, recalled []store.MemoryRecord, question string) string {
+// composeInput 组装用户输入：短期历史 + 当前问题。
+func (s *ChatService) composeInput(history []store.ChatMessage, question string) string {
 	var sb strings.Builder
 	if len(history) > 0 {
 		sb.WriteString("【最近对话】\n")
@@ -129,12 +125,6 @@ func (s *ChatService) composeInput(history []store.ChatMessage, recalled []store
 				role = "助手"
 			}
 			fmt.Fprintf(&sb, "%s：%s\n", role, m.Content)
-		}
-	}
-	if len(recalled) > 0 {
-		sb.WriteString("【相关记忆】\n")
-		for _, r := range recalled {
-			fmt.Fprintf(&sb, "- %s\n", r.Content)
 		}
 	}
 	sb.WriteString("【当前问题】\n" + question)
@@ -151,24 +141,12 @@ func (s *ChatService) profileSummary(userID uint64) string {
 	return string(data)
 }
 
-// rememberAll 写入短期缓冲 + 长期记忆（双写）。
-func (s *ChatService) rememberAll(ctx context.Context, userID uint64, sessionID, agentName, question, answer string) {
+// rememberAll 写入短期记忆（Redis 会话缓冲）。
+// 注意：原始对话不写长期向量库（避免噪音淹没+重复存储），
+// 长期记忆由各 Agent 通过 save_insight 工具自主沉淀（agent 作用域）。
+func (s *ChatService) rememberAll(ctx context.Context, sessionID, question, answer string) {
 	_ = s.buffer.Append(ctx, sessionID, "user", question)
 	_ = s.buffer.Append(ctx, sessionID, "assistant", answer)
-	s.memory.Remember(ctx, store.MemoryRecord{AgentName: agentName, UserID: userID, SessionID: sessionID, Scope: store.ScopeSession, Role: "user", Content: question})
-	s.memory.Remember(ctx, store.MemoryRecord{AgentName: agentName, UserID: userID, SessionID: sessionID, Scope: store.ScopeSession, Role: "assistant", Content: answer})
-}
-
-// formatMemories 格式化召回的记忆列表。
-func formatMemories(records []store.MemoryRecord) string {
-	if len(records) == 0 {
-		return "（无）"
-	}
-	var lines []string
-	for _, r := range records {
-		lines = append(lines, "- "+r.Content)
-	}
-	return strings.Join(lines, "\n")
 }
 
 // fallbackReply Agent 调用失败时的兜底回复。

@@ -19,11 +19,12 @@ type Services struct {
 
 // NewServices 装配全部业务服务。
 // 依赖为具体存储/调度组件，由 svc 层注入；mysql 为 nil 时相关能力降级。
-func NewServices(mysql *store.MySQLStore, supervisor *agent.Supervisor, jwtSecret string, jwtExpireHours int, logger *slog.Logger) *Services {
+// memory 用于规则触发的用户记忆沉淀（档案变更/收藏等明确信号）。
+func NewServices(mysql *store.MySQLStore, supervisor *agent.Supervisor, jwtSecret string, jwtExpireHours int, logger *slog.Logger, memory *agent.Memory) *Services {
 	return &Services{
 		User:     NewUserService(mysql, jwtSecret, jwtExpireHours),
-		Favorite: NewFavoriteService(mysql),
-		Parse:    NewParseService(supervisor, mysql, logger),
+		Favorite: NewFavoriteService(mysql, memory),
+		Parse:    NewParseService(supervisor, mysql, logger, memory),
 		Position: NewPositionService(mysql),
 	}
 }

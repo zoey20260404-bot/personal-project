@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"ai-start/internal/agent"
 	"ai-start/internal/store"
@@ -24,11 +25,12 @@ type ParseService struct {
 	supervisor *agent.Supervisor // 调度中枢
 	mysql      *store.MySQLStore // 用户存储，nil 时跳过持久化
 	logger     *slog.Logger      // 日志器（注入）
+	memory     *agent.Memory     // 长期记忆（档案变更沉淀为用户画像，feat003）
 }
 
 // NewParseService 创建条件解析服务。
-func NewParseService(supervisor *agent.Supervisor, mysql *store.MySQLStore, logger *slog.Logger) *ParseService {
-	return &ParseService{supervisor: supervisor, mysql: mysql, logger: logger}
+func NewParseService(supervisor *agent.Supervisor, mysql *store.MySQLStore, logger *slog.Logger, memory *agent.Memory) *ParseService {
+	return &ParseService{supervisor: supervisor, mysql: mysql, logger: logger, memory: memory}
 }
 
 // Parse 条件解析主流程：文本 + 图片（可同时进行）融合解析 → 结构化条件。
@@ -113,6 +115,15 @@ func (s *ParseService) UpdateFromText(ctx context.Context, userID uint64, text s
 	merged := mergeWithExisting(newProfile, result.UncertainFields, existing)
 	changed := diffProfiles(existing, merged)
 	s.upsertProfile(userID, merged)
+	// 档案变更沉淀为 user 作用域记忆（跨 Agent 共享的画像信号）
+	if len(changed) > 0 && s.memory != nil {
+		s.memory.Remember(ctx, store.MemoryRecord{
+			UserID:  userID,
+			Scope:   store.ScopeUser,
+			Role:    "insight",
+			Content: "用户档案更新：" + strings.Join(changed, "；"),
+		})
+	}
 	return merged, changed, nil
 }
 

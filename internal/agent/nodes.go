@@ -25,7 +25,7 @@ type parseTask struct {
 // 每个 Agent 配置变成一个独立 Node，各自 goroutine 运行，通过总线通信。
 // 新增 Agent：在配置 agents 表中加定义（新类型时在 switch 中注册构造逻辑）。
 func BuildRuntime(agentCfgs map[string]config.AgentConfig, runtimeCfg config.RuntimeConfig,
-	manager *llm.Manager, prompts *prompt.Store, tools *tool.Registry, logger *slog.Logger) (*runtime.Runtime, error) {
+	manager *llm.Manager, prompts *prompt.Store, tools *tool.Registry, logger *slog.Logger, memory *Memory) (*runtime.Runtime, error) {
 
 	rt := runtime.NewRuntime(runtimeCfg.BusBuffer, logger)
 
@@ -34,7 +34,7 @@ func BuildRuntime(agentCfgs map[string]config.AgentConfig, runtimeCfg config.Run
 		case AgentTypeParser:
 			rt.Register(NewParserNode(name, ac, manager, prompts, runtimeCfg.NodeInbox))
 		case AgentTypeReact:
-			react := NewReActAgent(name, ac.Model, prompts, ac.Prompt, ac.MaxSteps, ac.Temperature, manager, tools, ac.Tools, logger)
+			react := NewReActAgent(name, ac.Model, prompts, ac.Prompt, ac.MaxSteps, ac.Temperature, manager, tools, ac.Tools, logger, memory)
 			rt.Register(NewReActNode(name, react, runtimeCfg.NodeInbox))
 		case AgentTypeRouter:
 			router := NewRouterAgent(manager, ac.Model, prompts, "advisor") // 兜底目标：选岗参谋

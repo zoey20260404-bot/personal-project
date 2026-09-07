@@ -37,7 +37,11 @@ func (h *Handler) Chat(c *gin.Context) {
 	}
 
 	// 事件 sink：ReAct/节点产生的事件实时写入 SSE
+	streamed := false // 是否已有增量流出（决定 done 事件要不要带完整答案）
 	sink := func(ev runtime.StreamEvent) {
+		if ev.Type == runtime.EventDelta && ev.Content != "" {
+			streamed = true
+		}
 		writeSSE(c, ev)
 		flusher.Flush()
 	}
@@ -48,8 +52,16 @@ func (h *Handler) Chat(c *gin.Context) {
 		flusher.Flush()
 		return
 	}
-	// 完成事件：携带最终答案与元信息（delta 流可能为空——如兜底回复）
-	data, _ := json.Marshal(reply)
+	// 完成事件：元信息必带；答案仅在未流式输出时携带（兜底回复等场景），避免重复传输
+	donePayload := map[string]any{
+		"session_id": reply.SessionID,
+		"agent":      reply.Agent,
+		"trace_id":   reply.TraceID,
+	}
+	if !streamed {
+		donePayload["answer"] = reply.Answer
+	}
+	data, _ := json.Marshal(donePayload)
 	writeSSE(c, runtime.StreamEvent{Type: runtime.EventDone, Content: string(data), Agent: reply.Agent})
 	flusher.Flush()
 }

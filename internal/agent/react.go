@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"ai-start/internal/llm"
 	"ai-start/internal/prompt"
@@ -36,10 +37,12 @@ type ReActAgent struct {
 	tools       *tool.Registry // 工具注册表
 	toolDefs    []llm.ToolDef  // 本 Agent 可用的工具定义
 	logger      *slog.Logger   // 日志器（注入）
+	memory      *Memory        // 长期记忆（Agent 自管经验，nil 停用）
 }
 
 // NewReActAgent 创建 ReAct Agent。logger 为空时使用 slog.Default()。
-func NewReActAgent(name, channel string, prompts *prompt.Store, promptName string, maxSteps int, temperature *float64, caller LLMCaller, tools *tool.Registry, toolNames []string, logger *slog.Logger) *ReActAgent {
+// memory 为该 Agent 的长期记忆（经验自召回/自沉淀），nil 停用。
+func NewReActAgent(name, channel string, prompts *prompt.Store, promptName string, maxSteps int, temperature *float64, caller LLMCaller, tools *tool.Registry, toolNames []string, logger *slog.Logger, memory *Memory) *ReActAgent {
 	if maxSteps <= 0 {
 		maxSteps = 5 // 默认最大步数
 	}
@@ -56,6 +59,7 @@ func NewReActAgent(name, channel string, prompts *prompt.Store, promptName strin
 		llm:         caller,
 		tools:       tools,
 		logger:      logger,
+		memory:      memory,
 	}
 	// 按配置的工具名导出工具定义
 	for _, d := range tools.Defs(toolNames) {
@@ -73,10 +77,28 @@ func (a *ReActAgent) Name() string { return a.name }
 
 // Run 执行 ReAct 循环，返回最终文本回答。
 func (a *ReActAgent) Run(ctx context.Context, input string) (string, error) {
+	// 经验自召回（feat003）：Agent 开头召回自己的长期记忆（agent/user 作用域），
+	// 与编排层的短期历史互补——编排层管"刚才聊了啥"，Agent 管"我记得什么"。
+	vars := promptVarsFromContext(ctx)
+	if a.memory != nil {
+		if userID := runtime.UserIDFromContext(ctx); userID != 0 {
+			if recalled := a.memory.Recall(ctx, a.name, userID, "", input, 5); len(recalled) > 0 {
+				if vars == nil {
+					vars = map[string]any{}
+				}
+				var lines []string
+				for _, r := range recalled {
+					lines = append(lines, "- "+r.Content)
+				}
+				vars["Memories"] = strings.Join(lines, "\n")
+			}
+		}
+	}
+
 	// 每次运行现取并渲染系统提示词（动态 Prompt：变量来自 context，可随时切换变体）
 	system := ""
 	if a.prompts != nil {
-		if rendered, err := a.prompts.Render(a.promptName, promptVarsFromContext(ctx)); err == nil {
+		if rendered, err := a.prompts.Render(a.promptName, vars); err == nil {
 			system = rendered
 		} else {
 			system = a.prompts.Get(a.promptName) // 渲染失败回退原文

@@ -12,6 +12,14 @@ type traceIDKey struct{}
 // agentNameKey Agent 名的 context 键（上下文隔离：标记当前执行归属哪个 Agent）。
 type agentNameKey struct{}
 
+// AgentNameFromContext 从 context 取当前节点名（节点内注入，工具/Agent 判断"我是谁"用）。
+func AgentNameFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(agentNameKey{}).(string); ok {
+		return v
+	}
+	return ""
+}
+
 // WithTraceID 将链路追踪 ID 注入 context。
 func WithTraceID(ctx context.Context, traceID string) context.Context {
 	return context.WithValue(ctx, traceIDKey{}, traceID)

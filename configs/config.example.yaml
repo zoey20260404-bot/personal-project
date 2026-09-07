@@ -37,10 +37,46 @@ models:
 # Agent 定义表：新增 Agent 在此加配置即可（type 支持 parser / react）
 # prompt 字段是"默认 Prompt 名"，Agent 运行时可按场景从 Prompt 库换用其他变体
 agents:
+  interviewer: # 纯文本结构化面试，无工具
+    type: react
+    model: chat
+    prompt: interviewer
+    tools: []
+    max_steps: 1
+    temperature: 0.5
   parser: # 条件解析 Agent（PRD 2.1）
     type: parser
     model: chat
     prompt: parser
+  router: # 意图路由 Agent（feat002）：LLM 判断消息该交给谁
+    type: router
+    model: chat
+    temperature: 0.1 # 路由是分类任务，低温度求稳定
+  advisor: # 选岗参谋 Agent（feat002）：选岗咨询 + 档案补充 + 收藏 + 触发推荐
+    type: react
+    model: chat
+    prompt: advisor
+    tools: ["query_positions", "get_profile", "update_profile", "add_favorite", "save_insight", "run_advise"] # 工具白名单
+    max_steps: 4      # ReAct 步数上限（兜底防死循环）
+    temperature: 0.5  # 表达类任务，适度温度
+  # ===== feat004 选岗推荐流水线（advise flow）=====
+  researcher: # 岗位检索（纯代码节点，六维硬条件 SQL）
+    type: code
+  analyzer: # 竞争分析（LLM，低温求稳）
+    type: llm_step
+    model: chat
+    prompt: analyzer
+    temperature: 0.3
+  strategist: # 冲稳保策略（LLM，最低温求稳）
+    type: llm_step
+    model: chat
+    prompt: strategist
+    temperature: 0.2
+  responder: # 报告撰写（LLM，适度温度求表达）
+    type: llm_step
+    model: chat
+    prompt: responder
+    temperature: 0.7
   assistant: # 通用问答 ReAct Agent（示例：带岗位查询工具的推理循环）
     type: react
     model: chat
@@ -51,13 +87,13 @@ agents:
 # 执行流程编排：流程名 → 节点名列表（按序执行，上游输出作为下游输入）
 flows:
   parse: ["parser"]
-  # advise: ["parser", "researcher", "analyzer", "strategist", "responder"] # 后续迭代启用
+  advise: ["researcher", "analyzer", "strategist", "responder"] # feat004 选岗推荐流水线
 
 # Agent 运行时参数
 runtime:
   bus_buffer: 256   # 消息总线缓冲容量（背压阈值）
   node_inbox: 32    # 节点收件箱缓冲容量
-  call_timeout: 30  # 节点调用超时（秒）
+  call_timeout: 90  # 节点调用超时（秒，advise 流程 LLM 节点较慢）
 
 store:
   mysql: # 本地 Docker MySQL：用户信息、收藏等结构化业务数据
